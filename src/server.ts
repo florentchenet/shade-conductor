@@ -11,7 +11,9 @@ import type {
   WSMessageFromClient,
   RuntimeState,
   AudioBinding,
+  PaletteConfig,
 } from './types.js';
+import { handleValidationResult } from './tools/shader-tools.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -31,6 +33,14 @@ let audioBindings: AudioBinding[] = [];
 
 /** Current shader ID loaded in the browser */
 let currentShaderId: string | null = null;
+
+/** Current palette state (server-side tracking for partial updates) */
+let currentPalette: PaletteConfig = {
+  color1: [0, 0, 0],
+  color2: [0, 0, 0],
+  color3: [0, 0, 0],
+  bg: [0, 0, 0],
+};
 
 /** Most recent RuntimeState reported by the browser client */
 let lastRuntimeState: RuntimeState | null = null;
@@ -165,6 +175,25 @@ export function setCurrentShaderId(id: string): void {
 }
 
 /**
+ * Return the current palette state (for partial-update merging).
+ */
+export function getCurrentPalette(): PaletteConfig {
+  return { ...currentPalette, color1: [...currentPalette.color1], color2: [...currentPalette.color2], color3: [...currentPalette.color3], bg: [...currentPalette.bg] } as PaletteConfig;
+}
+
+/**
+ * Update the tracked palette state (called by MCP tools after broadcasting).
+ */
+export function setCurrentPalette(palette: PaletteConfig): void {
+  currentPalette = {
+    color1: [...palette.color1],
+    color2: [...palette.color2],
+    color3: [...palette.color3],
+    bg: [...palette.bg],
+  };
+}
+
+/**
  * Update tracked audio bindings (called by MCP tools).
  */
 export function setAudioBindings(bindings: AudioBinding[]): void {
@@ -268,6 +297,7 @@ function handleClientMessage(_ws: WebSocket, msg: WSMessageFromClient): void {
       } else {
         console.error(`[shader] validation failed for ${msg.id}: ${msg.error}`);
       }
+      handleValidationResult(msg.id, msg.success, msg.error);
       break;
 
     case 'ready':

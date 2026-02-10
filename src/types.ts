@@ -96,16 +96,17 @@ export type WSMessageToClient =
   | { type: 'shader_push'; code: string; id: string }
   | { type: 'shader_crossfade'; code: string; id: string; duration: number }
   | { type: 'param_set'; name: string; value: number }
-  | { type: 'palette_set'; colors: { color1: number[]; color2: number[]; color3: number[]; bg: number[] } }
+  | { type: 'palette_set'; colors: { color1: [number, number, number]; color2: [number, number, number]; color3: [number, number, number]; bg: [number, number, number] } }
   | { type: 'audio_config'; config: { smoothing?: number; peakDecay?: number; gainBoost?: number } }
   | { type: 'get_state' }
   | { type: 'chapter_info'; chapter: { name: string; index: number; total: number } }
   | { type: 'ext_set'; channel: number; value: number }
   | { type: 'ext_xy_set'; channel: number; x: number; y: number }
   | { type: 'bpm_set'; bpm: number }
-  | { type: 'layer_push'; layer: number; code: string; blend: string }
+  | { type: 'layer_push'; layer: number; code: string; blend: 'add' | 'multiply' | 'screen' | 'overlay' | 'difference'; opacity: number }
+  | { type: 'layer_opacity'; layer: number; opacity: number }
   | { type: 'layer_remove'; layer: number }
-  | { type: 'capture_start'; format: string }
+  | { type: 'capture_start'; format: 'png' | 'webm' }
   | { type: 'capture_stop' }
   | { type: 'capture_screenshot' }
   | { type: 'automation'; automations: Automation[] }

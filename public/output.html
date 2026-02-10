@@ -29,7 +29,7 @@ const ext = new Float32Array(16);
 const extXY = Array.from({length:4}, () => ({x:0, y:0}));
 let bpm = 120, uTime = 0, uBeat = 0;
 const params = new Float32Array(4);
-const palette = {primary:[1,0,0.3], secondary:[0,0.5,1], accent:[1,1,0]};
+const palette = {color1:[1,0,0.3], color2:[0,0.5,1], color3:[1,1,0], bg:[0.04,0.03,0.06]};
 let intensity = 1, speed = 1;
 
 // Audio state
@@ -137,11 +137,15 @@ function uploadUniforms() {
   gl.uniform1f(u('u_peak'), audio.peak);
   gl.uniform1fv(u('u_spectrum'), audio.spectrum);
 
-  gl.uniform3fv(u('u_palette_primary'), palette.primary);
-  gl.uniform3fv(u('u_palette_secondary'), palette.secondary);
-  gl.uniform3fv(u('u_palette_accent'), palette.accent);
+  gl.uniform3fv(u('u_color1'), palette.color1);
+  gl.uniform3fv(u('u_color2'), palette.color2);
+  gl.uniform3fv(u('u_color3'), palette.color3);
+  gl.uniform3fv(u('u_bg'), palette.bg);
 
-  gl.uniform1fv(u('u_params'), params);
+  gl.uniform1f(u('u_param1'), params[0]);
+  gl.uniform1f(u('u_param2'), params[1]);
+  gl.uniform1f(u('u_param3'), params[2]);
+  gl.uniform1f(u('u_param4'), params[3]);
   gl.uniform1f(u('u_intensity'), intensity);
   gl.uniform1f(u('u_speed'), speed);
   gl.uniform1fv(u('u_ext'), ext);
@@ -155,7 +159,7 @@ function uploadUniforms() {
     const prevIdx = 1 - fboIdx;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, fbos[prevIdx].tex);
-    gl.uniform1i(u('u_prev_frame'), 0);
+    gl.uniform1i(u('u_prevFrame'), 0);
   }
 }
 
@@ -198,42 +202,55 @@ function connectWS() {
 
 function handleMsg(msg) {
   switch(msg.type) {
-    case 'push_shader':
-    case 'crossfade':
-      compileShader(msg.fragmentShader || msg.shader);
+    case 'shader_push':
+      compileShader(msg.code);
+      break;
+    case 'shader_crossfade':
+      compileShader(msg.code);
       break;
     case 'ext_set':
-      ext[msg.channel] = msg.value;
+      if (msg.channel >= 0 && msg.channel < 16) ext[msg.channel] = msg.value;
       break;
     case 'ext_xy_set':
-      extXY[msg.channel] = {x: msg.x, y: msg.y};
+      if (msg.channel >= 0 && msg.channel < 4) extXY[msg.channel] = {x: msg.x, y: msg.y};
       break;
     case 'bpm_set':
-      bpm = msg.bpm;
+      if (msg.bpm > 0) bpm = msg.bpm;
       break;
-    case 'set_param':
-      if (msg.index >= 0 && msg.index < 4) params[msg.index] = msg.value;
-      break;
-    case 'set_palette':
-      if (msg.primary) palette.primary = msg.primary;
-      if (msg.secondary) palette.secondary = msg.secondary;
-      if (msg.accent) palette.accent = msg.accent;
-      break;
-    case 'set_intensity':
-      intensity = msg.value;
-      break;
-    case 'set_speed':
-      speed = msg.value;
-      break;
-    case 'blackout':
-      if (msg.enabled) {
-        compileShader(tier === 'A'
-          ? '#version 300 es\nprecision mediump float;out vec4 o;void main(){o=vec4(0,0,0,1);}'
-          : 'precision mediump float;void main(){gl_FragColor=vec4(0,0,0,1);}');
+    case 'param_set': {
+      const name = msg.name;
+      const value = msg.value;
+      switch(name) {
+        case 'u_param1': params[0] = value; break;
+        case 'u_param2': params[1] = value; break;
+        case 'u_param3': params[2] = value; break;
+        case 'u_param4': params[3] = value; break;
+        case 'u_intensity': intensity = value; break;
+        case 'u_speed': speed = value; break;
       }
       break;
-    case 'audio_levels':
-      if (msg.levels) Object.assign(audio, msg.levels);
+    }
+    case 'palette_set':
+      if (msg.colors) {
+        if (msg.colors.color1) palette.color1 = msg.colors.color1;
+        if (msg.colors.color2) palette.color2 = msg.colors.color2;
+        if (msg.colors.color3) palette.color3 = msg.colors.color3;
+        if (msg.colors.bg) palette.bg = msg.colors.bg;
+      }
+      break;
+    case 'perform_blackout':
+      compileShader(tier === 'A'
+        ? '#version 300 es\nprecision mediump float;out vec4 o;void main(){o=vec4(0,0,0,1);}'
+        : 'precision mediump float;void main(){gl_FragColor=vec4(0,0,0,1);}');
+      break;
+    case 'perform_flash':
+      // Flash overlay not implemented in output view, but handle gracefully
+      break;
+    case 'audio_config':
+      // Audio config — output view doesn't process audio locally
+      break;
+    case 'chapter_info':
+      // Chapter info — no HUD in output view
       break;
     case 'get_state':
       if (ws && ws.readyState === 1) {
@@ -246,7 +263,19 @@ function handleMsg(msg) {
         }}));
       }
       break;
-    case 'ready':
+    case 'capture_start':
+    case 'capture_stop':
+    case 'capture_screenshot':
+      break;
+    case 'shader_validate':
+      break;
+    case 'layer_push':
+    case 'layer_remove':
+    case 'layer_opacity':
+      // Layer opacity — stored when layer compositing is implemented
+      break;
+    case 'audio_bind':
+    case 'audio_unbind':
       break;
   }
 }

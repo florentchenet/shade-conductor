@@ -87,10 +87,10 @@ async function pushChapter(chapter: SetlistChapter, index: number, total: number
     broadcastToClients({
       type: 'palette_set',
       colors: {
-        color1: [...chapter.palette.color1],
-        color2: [...chapter.palette.color2],
-        color3: [...chapter.palette.color3],
-        bg: [...chapter.palette.bg],
+        color1: [...chapter.palette.color1] as [number, number, number],
+        color2: [...chapter.palette.color2] as [number, number, number],
+        color3: [...chapter.palette.color3] as [number, number, number],
+        bg: [...chapter.palette.bg] as [number, number, number],
       },
     });
   }

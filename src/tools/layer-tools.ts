@@ -57,6 +57,7 @@ export function registerLayerTools(server: McpServer): void {
         layer: args.layer,
         code: args.code,
         blend: args.blend,
+        opacity: args.opacity,
       });
 
       return mcpText({
@@ -104,11 +105,10 @@ export function registerLayerTools(server: McpServer): void {
       }
 
       state.opacity = args.opacity;
-      // Send as a param_set targeting the layer opacity uniform
       broadcastToClients({
-        type: 'param_set',
-        name: `u_layer${args.layer}_opacity`,
-        value: args.opacity,
+        type: 'layer_opacity',
+        layer: args.layer,
+        opacity: args.opacity,
       });
 
       return mcpText({

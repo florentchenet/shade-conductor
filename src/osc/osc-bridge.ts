@@ -116,7 +116,7 @@ export function startOscBridge(
       const g = message.args[1] ?? 0;
       const b = message.args[2] ?? 0;
       // Build a palette update with only the changed color
-      const colors: Record<string, number[]> = {
+      const colors: { color1: [number, number, number]; color2: [number, number, number]; color3: [number, number, number]; bg: [number, number, number] } = {
         color1: [0, 0, 0],
         color2: [0, 0, 0],
         color3: [0, 0, 0],
@@ -125,12 +125,7 @@ export function startOscBridge(
       colors[key] = [r, g, b];
       broadcastFn({
         type: 'palette_set',
-        colors: colors as {
-          color1: number[];
-          color2: number[];
-          color3: number[];
-          bg: number[];
-        },
+        colors,
       });
     });
   }

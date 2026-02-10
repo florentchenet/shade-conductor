@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { broadcastToClients, getCurrentState, getServerState, setCurrentShaderId } from '../server.js';
+import { broadcastToClients, getCurrentState, getServerState, setCurrentShaderId, getCurrentPalette, setCurrentPalette } from '../server.js';
 import { getPreset } from '../store/preset-store.js';
 
 // ---------------------------------------------------------------------------
@@ -139,13 +139,16 @@ export function registerPerformTools(server: McpServer): void {
     },
     async (args) => {
       try {
+        // Merge with current palette — only overwrite colors that were explicitly provided
+        const current = getCurrentPalette();
         const colors = {
-          color1: args.color1 ? hexToRgb(args.color1) : [0, 0, 0] as [number, number, number],
-          color2: args.color2 ? hexToRgb(args.color2) : [0, 0, 0] as [number, number, number],
-          color3: args.color3 ? hexToRgb(args.color3) : [0, 0, 0] as [number, number, number],
-          bg: args.bg ? hexToRgb(args.bg) : [0, 0, 0] as [number, number, number],
+          color1: args.color1 ? hexToRgb(args.color1) : current.color1,
+          color2: args.color2 ? hexToRgb(args.color2) : current.color2,
+          color3: args.color3 ? hexToRgb(args.color3) : current.color3,
+          bg: args.bg ? hexToRgb(args.bg) : current.bg,
         };
         broadcastToClients({ type: 'palette_set', colors });
+        setCurrentPalette(colors);
         return mcpText({ status: 'palette_updated', colors });
       } catch (err) {
         return mcpError(`Palette update failed: ${(err as Error).message}`);
