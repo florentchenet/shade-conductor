@@ -2,6 +2,7 @@
 // Listens for OSC messages and forwards them to browser clients via WebSocket
 
 import type { WSMessageToClient } from '../types.js';
+import { getCurrentPalette } from '../server.js';
 
 // osc-js ships as a UMD bundle; use createRequire for reliable CJS interop
 import { createRequire } from 'node:module';
@@ -115,12 +116,13 @@ export function startOscBridge(
       const r = message.args[0] ?? 0;
       const g = message.args[1] ?? 0;
       const b = message.args[2] ?? 0;
-      // Build a palette update with only the changed color
-      const colors: { color1: [number, number, number]; color2: [number, number, number]; color3: [number, number, number]; bg: [number, number, number] } = {
-        color1: [0, 0, 0],
-        color2: [0, 0, 0],
-        color3: [0, 0, 0],
-        bg: [0, 0, 0],
+      // Merge with current palette so unset colors are preserved
+      const current = getCurrentPalette();
+      const colors = {
+        color1: current.color1 as [number, number, number],
+        color2: current.color2 as [number, number, number],
+        color3: current.color3 as [number, number, number],
+        bg: current.bg as [number, number, number],
       };
       colors[key] = [r, g, b];
       broadcastFn({

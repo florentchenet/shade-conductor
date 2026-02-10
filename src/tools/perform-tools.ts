@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { broadcastToClients, getCurrentState, getServerState, setCurrentShaderId, getCurrentPalette, setCurrentPalette } from '../server.js';
+import { broadcastToClients, getCurrentState, getServerState, setCurrentShaderId, setCurrentShaderCode, getCurrentPalette, setCurrentPalette } from '../server.js';
 import { getPreset } from '../store/preset-store.js';
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,11 @@ function mcpError(message: string) {
  * Convert a hex color string (#RRGGBB or RRGGBB) to [r, g, b] in 0-1 range.
  */
 function hexToRgb(hex: string): [number, number, number] {
-  const clean = hex.replace(/^#/, '');
+  let clean = hex.replace(/^#/, '');
+  // Expand 3-char shorthand (#RGB → RRGGBB)
+  if (/^[0-9a-fA-F]{3}$/.test(clean)) {
+    clean = clean[0] + clean[0] + clean[1] + clean[1] + clean[2] + clean[2];
+  }
   if (!/^[0-9a-fA-F]{6}$/.test(clean)) {
     throw new Error(`Invalid hex color: ${hex}`);
   }
@@ -68,6 +72,7 @@ export function registerPerformTools(server: McpServer): void {
 
         broadcastToClients({ type: 'shader_push', code, id });
         setCurrentShaderId(id);
+        setCurrentShaderCode(code);
         return mcpText({ status: 'pushed', id });
       } catch (err) {
         return mcpError(`Push failed: ${(err as Error).message}`);
@@ -105,6 +110,7 @@ export function registerPerformTools(server: McpServer): void {
 
         broadcastToClients({ type: 'shader_crossfade', code, id, duration: args.duration });
         setCurrentShaderId(id);
+        setCurrentShaderCode(code);
         return mcpText({ status: 'crossfading', id, duration: args.duration });
       } catch (err) {
         return mcpError(`Crossfade failed: ${(err as Error).message}`);

@@ -116,13 +116,34 @@ function renderGrid() {
   filtered.forEach(p => {
     const card = document.createElement('div');
     card.className = 'card';
-    card.innerHTML = `
-      <canvas data-id="${p.id}" width="300" height="180"></canvas>
-      <div class="card-body">
-        <h3>${p.name}</h3>
-        <p>${p.description || ''}</p>
-        <div class="card-tags">${(p.tags||[]).map(t => `<span>${t}</span>`).join('')}</div>
-      </div>`;
+
+    const canvas = document.createElement('canvas');
+    canvas.dataset.id = p.id;
+    canvas.width = 300;
+    canvas.height = 180;
+    card.appendChild(canvas);
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = p.name;
+    body.appendChild(h3);
+
+    const desc = document.createElement('p');
+    desc.textContent = p.description || '';
+    body.appendChild(desc);
+
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'card-tags';
+    (p.tags || []).forEach(t => {
+      const span = document.createElement('span');
+      span.textContent = t;
+      tagsDiv.appendChild(span);
+    });
+    body.appendChild(tagsDiv);
+
+    card.appendChild(body);
     card.onclick = () => pushShader(p.id);
     grid.appendChild(card);
   });

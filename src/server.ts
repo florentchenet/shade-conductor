@@ -34,6 +34,9 @@ let audioBindings: AudioBinding[] = [];
 /** Current shader ID loaded in the browser */
 let currentShaderId: string | null = null;
 
+/** Current shader code loaded in the browser */
+let currentShaderCode: string | null = null;
+
 /** Current palette state (server-side tracking for partial updates) */
 let currentPalette: PaletteConfig = {
   color1: [0, 0, 0],
@@ -175,6 +178,20 @@ export function setCurrentShaderId(id: string): void {
 }
 
 /**
+ * Update tracked current shader code (called by MCP tools).
+ */
+export function setCurrentShaderCode(code: string): void {
+  currentShaderCode = code;
+}
+
+/**
+ * Return the current shader code, or null if none has been pushed.
+ */
+export function getCurrentShaderCode(): string | null {
+  return currentShaderCode;
+}
+
+/**
  * Return the current palette state (for partial-update merging).
  */
 export function getCurrentPalette(): PaletteConfig {
@@ -262,6 +279,14 @@ function sendSyncToClient(ws: WebSocket): void {
 
   // Push BPM
   ws.send(JSON.stringify({ type: 'bpm_set', bpm }));
+
+  // Push current shader if one is loaded
+  if (currentShaderCode && currentShaderId) {
+    ws.send(JSON.stringify({ type: 'shader_push', code: currentShaderCode, id: currentShaderId }));
+  }
+
+  // Push current palette
+  ws.send(JSON.stringify({ type: 'palette_set', colors: getCurrentPalette() }));
 
   // Request fresh state from client
   ws.send(JSON.stringify({ type: 'get_state' }));
