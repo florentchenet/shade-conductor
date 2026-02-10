@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+presets/
+setlists/
+captures/
+*.log
+.DS_Store

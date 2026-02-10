@@ -1,0 +1,30 @@
+{
+  "name": "shade-conductor",
+  "version": "1.0.0",
+  "description": "Shader MCP Server for RHINOCEROS — audio-reactive GLSL fragment shader performance tool",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/server.ts",
+    "dev:server": "tsx src/server.ts"
+  },
+  "keywords": ["mcp", "shader", "glsl", "webgl", "audio-reactive", "live-visuals"],
+  "author": "RHINOCEROS",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "osc-js": "^2.4.1",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.13",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0"
+  }
+}
