@@ -1,0 +1,2262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHADE</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: 'Courier New', monospace;
+  cursor: none;
+}
+
+#canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+
+/* ── HUD Overlay ── */
+#hud {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+#hud.hidden { opacity: 0; }
+
+#hud-top {
+  position: absolute;
+  top: 12px; left: 16px;
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
+  line-height: 1.6;
+  text-shadow: 0 0 4px rgba(0,0,0,0.9);
+  letter-spacing: 0.5px;
+}
+
+#hud-top .label {
+  color: rgba(255,255,255,0.4);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+#hud-top .value {
+  color: rgba(255,255,255,0.85);
+}
+
+#hud-top .tier-a { color: #6f6; }
+#hud-top .tier-b { color: #fc6; }
+
+#audio-meters {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+  align-items: flex-end;
+  height: 24px;
+}
+
+#audio-meters .meter-bar {
+  width: 4px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 1px;
+  min-height: 1px;
+  transition: height 0.05s ease;
+}
+
+#audio-meters .meter-bar.bass { background: rgba(255,100,100,0.7); }
+#audio-meters .meter-bar.mid  { background: rgba(100,255,100,0.7); }
+#audio-meters .meter-bar.high { background: rgba(100,150,255,0.7); }
+
+#audio-source-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#audio-source-badge.silent   { background: rgba(80,80,80,0.5); color: rgba(255,255,255,0.4); }
+#audio-source-badge.mic      { background: rgba(255,60,60,0.3); color: rgba(255,120,120,0.9); }
+#audio-source-badge.file     { background: rgba(60,120,255,0.3); color: rgba(100,160,255,0.9); }
+
+#ws-status {
+  margin-top: 6px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+#ws-status.connected    { color: rgba(100,255,100,0.6); }
+#ws-status.disconnected { color: rgba(255,80,80,0.9); }
+
+/* Chapter / setlist progress */
+#hud-bottom {
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 100%;
+  display: none;
+}
+
+#chapter-bar {
+  width: 100%;
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+}
+
+#chapter-fill {
+  height: 100%;
+  background: rgba(255,255,255,0.35);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+#chapter-label {
+  position: absolute;
+  bottom: 8px;
+  right: 16px;
+  color: rgba(255,255,255,0.4);
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+/* Flash overlay */
+#flash-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: none;
+}
+
+/* Recording indicator */
+#rec-dot {
+  position: fixed;
+  top: 16px; right: 16px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #f33;
+  z-index: 12;
+  display: none;
+  animation: rec-blink 1s ease infinite;
+}
+
+@keyframes rec-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Live code editor */
+#editor-panel {
+  position: fixed;
+  top: 0; right: 0;
+  width: 45%;
+  max-width: 700px;
+  height: 100%;
+  background: rgba(10,10,15,0.92);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  pointer-events: auto;
+}
+
+#editor-panel.visible {
+  display: flex;
+}
+
+#editor-header {
+  padding: 10px 16px;
+  color: rgba(255,255,255,0.5);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#editor-header button {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.7);
+  padding: 4px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+
+#editor-header button:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+#editor-textarea {
+  flex: 1;
+  background: transparent;
+  color: rgba(200,220,255,0.85);
+  border: none;
+  padding: 16px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  tab-size: 2;
+  pointer-events: auto;
+}
+
+#editor-error {
+  padding: 8px 16px;
+  color: rgba(255,100,100,0.9);
+  font-size: 11px;
+  border-top: 1px solid rgba(255,60,60,0.2);
+  max-height: 80px;
+  overflow-y: auto;
+  display: none;
+}
+
+/* Drag-drop overlay */
+#drop-zone {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.8);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.5);
+  font-size: 18px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  border: 2px dashed rgba(255,255,255,0.2);
+}
+
+#drop-zone.active { display: flex; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div id="hud-top">
+    <div><span class="label">SHADE </span><span id="tier-badge" class="value">--</span></div>
+    <div><span class="label">SHADER </span><span id="shader-name" class="value">default</span></div>
+    <div><span class="label">FPS </span><span id="fps-display" class="value">--</span></div>
+    <div><span class="label">RES </span><span id="res-display" class="value">--</span></div>
+    <div id="audio-meters">
+      <div class="meter-bar bass" id="meter-bass"></div>
+      <div class="meter-bar bass" id="meter-bass2"></div>
+      <div class="meter-bar mid"  id="meter-mid"></div>
+      <div class="meter-bar mid"  id="meter-mid2"></div>
+      <div class="meter-bar mid"  id="meter-mid3"></div>
+      <div class="meter-bar high" id="meter-high"></div>
+      <div class="meter-bar high" id="meter-high2"></div>
+    </div>
+    <div id="audio-source-badge" class="silent">SILENT</div>
+    <div id="ws-status" class="disconnected">DISCONNECTED</div>
+  </div>
+  <div id="hud-bottom">
+    <div id="chapter-label"></div>
+    <div id="chapter-bar"><div id="chapter-fill"></div></div>
+  </div>
+</div>
+
+<div id="flash-overlay"></div>
+<div id="rec-dot"></div>
+
+<div id="editor-panel">
+  <div id="editor-header">
+    <span>LIVE SHADER EDITOR</span>
+    <div>
+      <button id="btn-compile">COMPILE (Ctrl+Enter)</button>
+    </div>
+  </div>
+  <textarea id="editor-textarea" spellcheck="false"></textarea>
+  <div id="editor-error"></div>
+</div>
+
+<div id="drop-zone">DROP AUDIO FILE</div>
+
+<script>
+// ============================================================================
+// SHADE CONDUCTOR — Browser Runtime
+// Self-contained WebGL shader performance engine
+// ============================================================================
+
+(function() {
+'use strict';
+
+// ── Constants ──
+const WS_URL = 'ws://localhost:3334';
+const WS_RECONNECT_MS = 2000;
+const AUDIO_SEND_INTERVAL = 100;
+const FPS_SAMPLE_COUNT = 60;
+const BENCHMARK_FRAMES = 10;
+const PEAK_DECAY = 0.95;
+const DEFAULT_SMOOTHING = 0.8;
+const FFT_SIZE = 128; // 64 bins
+const FADE_OUT_FRAMES = 30; // ~0.5s at 60fps
+
+// ── Default color palette ──
+const DEFAULT_PALETTE = {
+  color1: [0.85, 0.35, 0.45],
+  color2: [0.30, 0.50, 0.80],
+  color3: [0.45, 0.75, 0.55],
+  bg:     [0.04, 0.03, 0.06]
+};
+
+// ── Default shader ──
+const DEFAULT_SHADER_BODY = `
+// SHADE default — dark pulsing void
+void main() {
+  vec2 uv = (gl_FragCoord.xy - u_resolution * 0.5) / min(u_resolution.x, u_resolution.y);
+  float d = length(uv);
+
+  // Concentric rings with slow morph
+  float t = u_time * 0.15;
+  float rings = 0.0;
+  for (float i = 0.0; i < 6.0; i++) {
+    float r = d * (3.0 + i * 0.8) - t * (1.0 + i * 0.3);
+    float wave = sin(r * 6.2832 + sin(uv.x * 3.0 + t * 2.0) * 0.5);
+    rings += wave * exp(-d * (1.5 + i * 0.3)) * (1.0 / (1.0 + i * 0.5));
+  }
+
+  // Gentle angular variation
+  float angle = atan(uv.y, uv.x);
+  float angular = sin(angle * 3.0 + t * 0.7) * 0.15 + sin(angle * 7.0 - t * 1.1) * 0.08;
+
+  // Combine
+  float v = rings * 0.5 + 0.5 + angular;
+  v = smoothstep(0.2, 0.8, v);
+
+  // Color mapping
+  vec3 c1 = u_bg + vec3(0.08, 0.06, 0.12);
+  vec3 c2 = u_color1 * 0.4;
+  vec3 c3 = u_color2 * 0.3;
+
+  vec3 col = mix(c1, c2, v * 0.7);
+  col += c3 * pow(v, 3.0) * 0.5;
+
+  // Subtle vignette
+  col *= 1.0 - d * 0.6;
+
+  // Breathing
+  col *= 0.85 + 0.15 * sin(u_time * 0.5);
+
+  SHADE_OUT = vec4(col, 1.0);
+}
+`;
+
+// ── Benchmark shader ──
+const BENCHMARK_SHADER_BODY = `
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  float v = 0.0;
+  for (float i = 0.0; i < 20.0; i++) {
+    v += sin(uv.x * 10.0 + i) * cos(uv.y * 10.0 + i) * 0.05;
+  }
+  SHADE_OUT = vec4(vec3(v + 0.5), 1.0);
+}
+`;
+
+
+// ============================================================================
+// STATE
+// ============================================================================
+
+const state = {
+  // WebGL
+  gl: null,
+  isWebGL2: false,
+  canvas: null,
+  quality: 1.0,
+  renderWidth: 0,
+  renderHeight: 0,
+
+  // Shader programs
+  currentProgram: null,
+  nextProgram: null,
+  currentShaderCode: '',
+  nextShaderCode: '',
+  currentShaderId: 'default',
+  vertexShader: null,
+
+  // Transition / crossfade
+  transitioning: false,
+  transitionStart: 0,
+  transitionDuration: 0,
+  transitionValue: 0.0,
+
+  // Offscreen FBOs for crossfade
+  fboA: null,
+  fboB: null,
+  blendProgram: null,
+
+  // Previous frame FBO (for feedback, Tier A)
+  fboPrev: null,
+  fboPrevAlt: null,
+  prevFrameFlip: false,
+
+  // Geometry
+  quadVAO: null,
+  quadBuffer: null,
+
+  // Uniforms
+  uniforms: {
+    time: 0,
+    frame: 0,
+    bass: 0, mid: 0, high: 0, energy: 0, peak: 0,
+    spectrum: new Float32Array(16),
+    color1: new Float32Array(DEFAULT_PALETTE.color1),
+    color2: new Float32Array(DEFAULT_PALETTE.color2),
+    color3: new Float32Array(DEFAULT_PALETTE.color3),
+    bg: new Float32Array(DEFAULT_PALETTE.bg),
+    param1: 0.5, param2: 0.5, param3: 0.5, param4: 0.5,
+    intensity: 1.0,
+    speed: 1.0,
+    transition: 0.0,
+    ext: new Float32Array(16),
+    ext_xy: new Float32Array(8), // 4 vec2s packed
+    bpm: 120.0,
+    beat: 0.0,
+    bar: 0.0,
+  },
+
+  // Audio
+  audioMode: 'silent', // 'silent', 'mic', 'file'
+  audioCtx: null,
+  analyser: null,
+  audioSource: null,
+  audioElement: null,
+  audioSmoothing: DEFAULT_SMOOTHING,
+  audioGainBoost: 1.0,
+  audioPeakDecay: PEAK_DECAY,
+  audioFadeCounter: 0,
+  audioActive: false,
+  fftData: null,        // Uint8Array for frequency data
+  timeData: null,       // Uint8Array for time domain
+  fftTexture: null,     // WebGL texture for full FFT (Tier A)
+  audioBindings: [],    // dynamic audio→param bindings
+
+  // WebSocket
+  ws: null,
+  wsConnected: false,
+  wsReconnectTimer: null,
+
+  // FPS
+  fpsHistory: [],
+  lastFrameTime: 0,
+  startTime: 0,
+
+  // UI
+  hudVisible: true,
+  editorVisible: false,
+  recording: false,
+  mediaRecorder: null,
+  recordedChunks: [],
+
+  // Chapter / setlist
+  chapterName: '',
+  chapterProgress: 0,
+
+  // Blackout
+  blackout: false,
+  blackoutValue: 0.0,
+  blackoutTarget: 0.0,
+
+  // Flash
+  flashActive: false,
+  flashStart: 0,
+  flashDuration: 0,
+  flashColor: [1, 1, 1],
+};
+
+
+// ============================================================================
+// WEBGL INITIALIZATION
+// ============================================================================
+
+function initWebGL() {
+  const canvas = document.getElementById('canvas');
+  state.canvas = canvas;
+
+  // Try WebGL2 first
+  let gl = canvas.getContext('webgl2', {
+    alpha: false,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    preserveDrawingBuffer: true,
+    powerPreference: 'high-performance',
+  });
+
+  if (gl) {
+    state.isWebGL2 = true;
+    console.log('[SHADE] WebGL2 initialized (Tier A)');
+  } else {
+    gl = canvas.getContext('webgl', {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      preserveDrawingBuffer: true,
+      powerPreference: 'high-performance',
+    });
+    if (!gl) {
+      document.body.innerHTML = '<div style="color:#f66;padding:40px;font-family:monospace">WebGL not supported</div>';
+      return false;
+    }
+    state.isWebGL2 = false;
+    console.log('[SHADE] WebGL1 initialized (Tier B)');
+  }
+
+  state.gl = gl;
+
+  // Enable float textures if available
+  if (!state.isWebGL2) {
+    gl.getExtension('OES_texture_float');
+    gl.getExtension('OES_texture_float_linear');
+  }
+
+  // Create fullscreen quad geometry
+  createQuadGeometry();
+
+  // Create vertex shader (shared by all programs)
+  state.vertexShader = createVertexShader();
+
+  // Create crossfade blend program
+  createBlendProgram();
+
+  // Update HUD
+  const tierBadge = document.getElementById('tier-badge');
+  tierBadge.textContent = state.isWebGL2 ? 'TIER A (WebGL2)' : 'TIER B (WebGL1)';
+  tierBadge.className = 'value ' + (state.isWebGL2 ? 'tier-a' : 'tier-b');
+
+  return true;
+}
+
+
+function createQuadGeometry() {
+  const gl = state.gl;
+  const vertices = new Float32Array([
+    -1, -1,
+     1, -1,
+    -1,  1,
+    -1,  1,
+     1, -1,
+     1,  1,
+  ]);
+
+  state.quadBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, state.quadBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+  if (state.isWebGL2) {
+    state.quadVAO = gl.createVertexArray();
+    gl.bindVertexArray(state.quadVAO);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+  }
+}
+
+
+function createVertexShader() {
+  const gl = state.gl;
+  const src = state.isWebGL2
+    ? `#version 300 es
+layout(location=0) in vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }`
+    : `attribute vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+
+  const shader = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(shader, src);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('[SHADE] Vertex shader error:', gl.getShaderInfoLog(shader));
+    return null;
+  }
+  return shader;
+}
+
+
+// ============================================================================
+// SHADER COMPILATION
+// ============================================================================
+
+function buildUniformBlock() {
+  if (state.isWebGL2) {
+    return `#version 300 es
+precision highp float;
+precision highp int;
+
+// Time & Space
+uniform float u_time;
+uniform vec2  u_resolution;
+uniform float u_quality;
+uniform int   u_frame;
+
+// Audio
+uniform float u_bass;
+uniform float u_mid;
+uniform float u_high;
+uniform float u_energy;
+uniform float u_peak;
+uniform float u_spectrum[16];
+
+// Color Palette
+uniform vec3 u_color1;
+uniform vec3 u_color2;
+uniform vec3 u_color3;
+uniform vec3 u_bg;
+
+// Params
+uniform float u_param1;
+uniform float u_param2;
+uniform float u_param3;
+uniform float u_param4;
+uniform float u_intensity;
+uniform float u_speed;
+
+// Transition
+uniform float u_transition;
+
+// External
+uniform float u_ext[16];
+uniform vec2  u_ext_xy[4];
+uniform float u_bpm;
+uniform float u_beat;
+uniform float u_bar;
+
+// Tier A extras
+uniform sampler2D u_fft;
+uniform sampler2D u_prevFrame;
+
+out vec4 fragColor;
+#define SHADE_OUT fragColor
+`;
+  } else {
+    return `precision highp float;
+precision highp int;
+
+// Time & Space
+uniform float u_time;
+uniform vec2  u_resolution;
+uniform float u_quality;
+uniform int   u_frame;
+
+// Audio
+uniform float u_bass;
+uniform float u_mid;
+uniform float u_high;
+uniform float u_energy;
+uniform float u_peak;
+uniform float u_spectrum[16];
+
+// Color Palette
+uniform vec3 u_color1;
+uniform vec3 u_color2;
+uniform vec3 u_color3;
+uniform vec3 u_bg;
+
+// Params
+uniform float u_param1;
+uniform float u_param2;
+uniform float u_param3;
+uniform float u_param4;
+uniform float u_intensity;
+uniform float u_speed;
+
+// Transition
+uniform float u_transition;
+
+// External
+uniform float u_ext[16];
+uniform vec2  u_ext_xy[4];
+uniform float u_bpm;
+uniform float u_beat;
+uniform float u_bar;
+
+#define SHADE_OUT gl_FragColor
+`;
+  }
+}
+
+
+function compileFragmentShader(code) {
+  const gl = state.gl;
+  const fullSource = buildUniformBlock() + '\n' + code;
+
+  const shader = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(shader, fullSource);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    return { success: false, error: log, shader: null };
+  }
+
+  return { success: true, error: null, shader };
+}
+
+
+function linkProgram(fragShader) {
+  const gl = state.gl;
+  const program = gl.createProgram();
+  gl.attachShader(program, state.vertexShader);
+  gl.attachShader(program, fragShader);
+
+  if (!state.isWebGL2) {
+    gl.bindAttribLocation(program, 0, 'a_pos');
+  }
+
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    gl.deleteShader(fragShader);
+    return { success: false, error: log, program: null };
+  }
+
+  // Cache uniform locations
+  cacheUniformLocations(program);
+
+  return { success: true, error: null, program };
+}
+
+
+function cacheUniformLocations(program) {
+  const gl = state.gl;
+  program._u = {};
+
+  const names = [
+    'u_time', 'u_resolution', 'u_quality', 'u_frame',
+    'u_bass', 'u_mid', 'u_high', 'u_energy', 'u_peak',
+    'u_color1', 'u_color2', 'u_color3', 'u_bg',
+    'u_param1', 'u_param2', 'u_param3', 'u_param4',
+    'u_intensity', 'u_speed', 'u_transition',
+    'u_bpm', 'u_beat', 'u_bar',
+  ];
+
+  for (const name of names) {
+    program._u[name] = gl.getUniformLocation(program, name);
+  }
+
+  // Arrays
+  program._u.u_spectrum = [];
+  for (let i = 0; i < 16; i++) {
+    program._u.u_spectrum[i] = gl.getUniformLocation(program, `u_spectrum[${i}]`);
+  }
+
+  program._u.u_ext = [];
+  for (let i = 0; i < 16; i++) {
+    program._u.u_ext[i] = gl.getUniformLocation(program, `u_ext[${i}]`);
+  }
+
+  program._u.u_ext_xy = [];
+  for (let i = 0; i < 4; i++) {
+    program._u.u_ext_xy[i] = gl.getUniformLocation(program, `u_ext_xy[${i}]`);
+  }
+
+  // Tier A textures
+  if (state.isWebGL2) {
+    program._u.u_fft = gl.getUniformLocation(program, 'u_fft');
+    program._u.u_prevFrame = gl.getUniformLocation(program, 'u_prevFrame');
+  }
+}
+
+
+function buildAndLinkShader(code) {
+  const compileResult = compileFragmentShader(code);
+  if (!compileResult.success) {
+    return { success: false, error: compileResult.error, program: null };
+  }
+
+  const linkResult = linkProgram(compileResult.shader);
+  if (!linkResult.success) {
+    return { success: false, error: linkResult.error, program: null };
+  }
+
+  return { success: true, error: null, program: linkResult.program };
+}
+
+
+function pushShader(code, id, crossfadeDuration) {
+  const result = buildAndLinkShader(code);
+
+  if (!result.success) {
+    console.error('[SHADE] Shader compile error:', result.error);
+    sendWS({
+      type: 'shader_error',
+      id: id || 'unknown',
+      error: result.error,
+    });
+    showEditorError(result.error);
+    return false;
+  }
+
+  clearEditorError();
+
+  if (crossfadeDuration && crossfadeDuration > 0 && state.currentProgram) {
+    // Crossfade mode
+    if (state.nextProgram) {
+      state.gl.deleteProgram(state.nextProgram);
+    }
+    state.nextProgram = result.program;
+    state.nextShaderCode = code;
+    state.transitioning = true;
+    state.transitionStart = performance.now() / 1000.0;
+    state.transitionDuration = crossfadeDuration;
+    state.transitionValue = 0.0;
+  } else {
+    // Instant swap
+    if (state.currentProgram) {
+      state.gl.deleteProgram(state.currentProgram);
+    }
+    state.currentProgram = result.program;
+    state.currentShaderCode = code;
+    state.transitioning = false;
+    state.transitionValue = 0.0;
+  }
+
+  state.currentShaderId = id || 'custom';
+  document.getElementById('shader-name').textContent = state.currentShaderId;
+
+  // Update editor text if editor is visible
+  if (state.editorVisible) {
+    document.getElementById('editor-textarea').value = code;
+  }
+
+  return true;
+}
+
+
+function validateShader(code, id) {
+  const result = buildAndLinkShader(code);
+
+  if (result.success) {
+    // Clean up — don't keep the program
+    state.gl.deleteProgram(result.program);
+    sendWS({ type: 'shader_validated', id: id, valid: true });
+  } else {
+    sendWS({ type: 'shader_validated', id: id, valid: false, error: result.error });
+  }
+}
+
+
+// ============================================================================
+// FRAMEBUFFER OBJECTS
+// ============================================================================
+
+function createFBO(width, height) {
+  const gl = state.gl;
+  const fbo = gl.createFramebuffer();
+  const tex = gl.createTexture();
+
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, state.isWebGL2 ? gl.RGBA16F : gl.RGBA,
+                width, height, 0, gl.RGBA,
+                state.isWebGL2 ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  return { fbo, tex, width, height };
+}
+
+
+function resizeFBO(fboObj, width, height) {
+  const gl = state.gl;
+  if (fboObj && (fboObj.width !== width || fboObj.height !== height)) {
+    gl.deleteTexture(fboObj.tex);
+    gl.deleteFramebuffer(fboObj.fbo);
+    return createFBO(width, height);
+  }
+  return fboObj || createFBO(width, height);
+}
+
+
+function ensureFBOs() {
+  const w = state.renderWidth;
+  const h = state.renderHeight;
+  if (w === 0 || h === 0) return;
+
+  state.fboA = resizeFBO(state.fboA, w, h);
+  state.fboB = resizeFBO(state.fboB, w, h);
+
+  if (state.isWebGL2) {
+    state.fboPrev = resizeFBO(state.fboPrev, w, h);
+    state.fboPrevAlt = resizeFBO(state.fboPrevAlt, w, h);
+  }
+}
+
+
+// ============================================================================
+// CROSSFADE BLEND PROGRAM
+// ============================================================================
+
+function createBlendProgram() {
+  const gl = state.gl;
+  let fragSrc;
+
+  if (state.isWebGL2) {
+    fragSrc = `#version 300 es
+precision highp float;
+uniform sampler2D u_texA;
+uniform sampler2D u_texB;
+uniform float u_mix;
+uniform vec2 u_resolution;
+out vec4 fragColor;
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec4 a = texture(u_texA, uv);
+  vec4 b = texture(u_texB, uv);
+  fragColor = mix(a, b, u_mix);
+}`;
+  } else {
+    fragSrc = `precision highp float;
+uniform sampler2D u_texA;
+uniform sampler2D u_texB;
+uniform float u_mix;
+uniform vec2 u_resolution;
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec4 a = texture2D(u_texA, uv);
+  vec4 b = texture2D(u_texB, uv);
+  gl_FragColor = mix(a, b, u_mix);
+}`;
+  }
+
+  const fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fragShader, fragSrc);
+  gl.compileShader(fragShader);
+
+  if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)) {
+    console.error('[SHADE] Blend shader error:', gl.getShaderInfoLog(fragShader));
+    return;
+  }
+
+  const program = gl.createProgram();
+  gl.attachShader(program, state.vertexShader);
+  gl.attachShader(program, fragShader);
+  if (!state.isWebGL2) {
+    gl.bindAttribLocation(program, 0, 'a_pos');
+  }
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('[SHADE] Blend link error:', gl.getProgramInfoLog(program));
+    return;
+  }
+
+  program._u = {
+    u_texA: gl.getUniformLocation(program, 'u_texA'),
+    u_texB: gl.getUniformLocation(program, 'u_texB'),
+    u_mix: gl.getUniformLocation(program, 'u_mix'),
+    u_resolution: gl.getUniformLocation(program, 'u_resolution'),
+  };
+
+  state.blendProgram = program;
+}
+
+
+// ============================================================================
+// UNIFORM UPLOADING
+// ============================================================================
+
+function uploadUniforms(program, overrideTransition) {
+  const gl = state.gl;
+  const u = program._u;
+  const s = state.uniforms;
+
+  if (!u) return;
+
+  // Time & Space
+  if (u.u_time !== null) gl.uniform1f(u.u_time, s.time * s.speed);
+  if (u.u_resolution !== null) gl.uniform2f(u.u_resolution, state.renderWidth, state.renderHeight);
+  if (u.u_quality !== null) gl.uniform1f(u.u_quality, state.quality * (state.isWebGL2 ? 2.0 : 1.0));
+  if (u.u_frame !== null) gl.uniform1i(u.u_frame, s.frame);
+
+  // Audio
+  if (u.u_bass !== null) gl.uniform1f(u.u_bass, s.bass);
+  if (u.u_mid !== null) gl.uniform1f(u.u_mid, s.mid);
+  if (u.u_high !== null) gl.uniform1f(u.u_high, s.high);
+  if (u.u_energy !== null) gl.uniform1f(u.u_energy, s.energy);
+  if (u.u_peak !== null) gl.uniform1f(u.u_peak, s.peak);
+
+  // Spectrum
+  for (let i = 0; i < 16; i++) {
+    if (u.u_spectrum[i] !== null) gl.uniform1f(u.u_spectrum[i], s.spectrum[i]);
+  }
+
+  // Palette
+  if (u.u_color1 !== null) gl.uniform3fv(u.u_color1, s.color1);
+  if (u.u_color2 !== null) gl.uniform3fv(u.u_color2, s.color2);
+  if (u.u_color3 !== null) gl.uniform3fv(u.u_color3, s.color3);
+  if (u.u_bg !== null) gl.uniform3fv(u.u_bg, s.bg);
+
+  // Params
+  if (u.u_param1 !== null) gl.uniform1f(u.u_param1, s.param1);
+  if (u.u_param2 !== null) gl.uniform1f(u.u_param2, s.param2);
+  if (u.u_param3 !== null) gl.uniform1f(u.u_param3, s.param3);
+  if (u.u_param4 !== null) gl.uniform1f(u.u_param4, s.param4);
+  if (u.u_intensity !== null) gl.uniform1f(u.u_intensity, s.intensity);
+  if (u.u_speed !== null) gl.uniform1f(u.u_speed, s.speed);
+
+  // Transition
+  const tv = overrideTransition !== undefined ? overrideTransition : s.transition;
+  if (u.u_transition !== null) gl.uniform1f(u.u_transition, tv);
+
+  // External
+  for (let i = 0; i < 16; i++) {
+    if (u.u_ext[i] !== null) gl.uniform1f(u.u_ext[i], s.ext[i]);
+  }
+  for (let i = 0; i < 4; i++) {
+    if (u.u_ext_xy[i] !== null) gl.uniform2f(u.u_ext_xy[i], s.ext_xy[i*2], s.ext_xy[i*2+1]);
+  }
+
+  // BPM
+  if (u.u_bpm !== null) gl.uniform1f(u.u_bpm, s.bpm);
+  if (u.u_beat !== null) gl.uniform1f(u.u_beat, s.beat);
+  if (u.u_bar !== null) gl.uniform1f(u.u_bar, s.bar);
+
+  // Tier A textures
+  if (state.isWebGL2) {
+    // FFT texture on unit 0
+    if (u.u_fft !== null && state.fftTexture) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, state.fftTexture);
+      gl.uniform1i(u.u_fft, 0);
+    }
+
+    // Previous frame on unit 1
+    if (u.u_prevFrame !== null) {
+      const prevFbo = state.prevFrameFlip ? state.fboPrevAlt : state.fboPrev;
+      if (prevFbo) {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, prevFbo.tex);
+        gl.uniform1i(u.u_prevFrame, 1);
+      }
+    }
+  }
+}
+
+
+// ============================================================================
+// RENDERING
+// ============================================================================
+
+function drawQuad() {
+  const gl = state.gl;
+
+  if (state.isWebGL2) {
+    gl.bindVertexArray(state.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindVertexArray(null);
+  } else {
+    gl.bindBuffer(gl.ARRAY_BUFFER, state.quadBuffer);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+}
+
+
+function renderToFBO(fboObj, program) {
+  const gl = state.gl;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboObj.fbo);
+  gl.viewport(0, 0, fboObj.width, fboObj.height);
+  gl.useProgram(program);
+  uploadUniforms(program);
+  drawQuad();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+
+function renderBlend(texA, texB, mix) {
+  const gl = state.gl;
+  gl.viewport(0, 0, state.renderWidth, state.renderHeight);
+  gl.useProgram(state.blendProgram);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texA);
+  gl.uniform1i(state.blendProgram._u.u_texA, 0);
+
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, texB);
+  gl.uniform1i(state.blendProgram._u.u_texB, 1);
+
+  gl.uniform1f(state.blendProgram._u.u_mix, mix);
+  gl.uniform2f(state.blendProgram._u.u_resolution, state.renderWidth, state.renderHeight);
+
+  drawQuad();
+}
+
+
+function render(timestamp) {
+  requestAnimationFrame(render);
+
+  const gl = state.gl;
+  if (!gl || !state.currentProgram) return;
+
+  // Time
+  const now = timestamp / 1000.0;
+  if (state.startTime === 0) state.startTime = now;
+  state.uniforms.time = now - state.startTime;
+  state.uniforms.frame++;
+
+  // BPM calculation
+  const beatTime = state.uniforms.time * state.uniforms.bpm / 60.0;
+  state.uniforms.beat = beatTime % 1.0;
+  state.uniforms.bar = (beatTime / 4.0) % 1.0;
+
+  // FPS tracking
+  if (state.lastFrameTime > 0) {
+    const dt = now - state.lastFrameTime;
+    const fps = 1.0 / dt;
+    state.fpsHistory.push(fps);
+    if (state.fpsHistory.length > FPS_SAMPLE_COUNT) state.fpsHistory.shift();
+  }
+  state.lastFrameTime = now;
+
+  // Update audio uniforms
+  updateAudioUniforms();
+
+  // Process audio bindings
+  processAudioBindings();
+
+  // Blackout
+  if (state.blackout) {
+    state.blackoutValue = Math.min(1.0, state.blackoutValue + (1.0 / 30.0));
+  } else {
+    state.blackoutValue = Math.max(0.0, state.blackoutValue - (1.0 / 30.0));
+  }
+
+  // Handle canvas resize
+  handleResize();
+
+  // Ensure FBOs exist
+  ensureFBOs();
+
+  // Transition update
+  if (state.transitioning) {
+    const elapsed = now - state.transitionStart;
+    state.transitionValue = Math.min(1.0, elapsed / state.transitionDuration);
+    state.uniforms.transition = state.transitionValue;
+
+    if (state.transitionValue >= 1.0) {
+      // Transition complete
+      gl.deleteProgram(state.currentProgram);
+      state.currentProgram = state.nextProgram;
+      state.currentShaderCode = state.nextShaderCode;
+      state.nextProgram = null;
+      state.nextShaderCode = '';
+      state.transitioning = false;
+      state.transitionValue = 0.0;
+      state.uniforms.transition = 0.0;
+    }
+  }
+
+  // Render
+  gl.viewport(0, 0, state.renderWidth, state.renderHeight);
+
+  if (state.transitioning && state.nextProgram && state.fboA && state.fboB) {
+    // Crossfade: render both to FBOs, then blend
+    renderToFBO(state.fboA, state.currentProgram);
+    renderToFBO(state.fboB, state.nextProgram);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, state.renderWidth, state.renderHeight);
+    renderBlend(state.fboA.tex, state.fboB.tex, state.transitionValue);
+  } else {
+    // Direct render
+    if (state.isWebGL2 && state.fboPrev && state.fboPrevAlt) {
+      // Render to offscreen for prev-frame capture
+      const target = state.prevFrameFlip ? state.fboPrev : state.fboPrevAlt;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+      gl.viewport(0, 0, target.width, target.height);
+    } else {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, state.renderWidth, state.renderHeight);
+    }
+
+    gl.useProgram(state.currentProgram);
+    uploadUniforms(state.currentProgram);
+    drawQuad();
+
+    if (state.isWebGL2 && state.fboPrev && state.fboPrevAlt) {
+      // Copy to screen
+      const target = state.prevFrameFlip ? state.fboPrev : state.fboPrevAlt;
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, target.fbo);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.blitFramebuffer(
+        0, 0, target.width, target.height,
+        0, 0, state.renderWidth, state.renderHeight,
+        gl.COLOR_BUFFER_BIT, gl.NEAREST
+      );
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      state.prevFrameFlip = !state.prevFrameFlip;
+    }
+  }
+
+  // Blackout overlay (darken via blending)
+  if (state.blackoutValue > 0.001) {
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+    // We need a simple black overlay shader — reuse blend with black
+    // Actually, simplest: just clear with black at the blackout alpha
+    // Instead, use scissor trick or a tiny shader. Let's do it properly:
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.BLEND);
+    // For blackout, we'll modify the output in the CSS overlay instead
+  }
+
+  // Update HUD
+  if (state.hudVisible) updateHUD();
+}
+
+
+function handleResize() {
+  const canvas = state.canvas;
+  const dpr = window.devicePixelRatio || 1;
+  const displayWidth = window.innerWidth;
+  const displayHeight = window.innerHeight;
+
+  canvas.style.width = displayWidth + 'px';
+  canvas.style.height = displayHeight + 'px';
+
+  const newW = Math.floor(displayWidth * dpr * state.quality);
+  const newH = Math.floor(displayHeight * dpr * state.quality);
+
+  if (canvas.width !== newW || canvas.height !== newH) {
+    canvas.width = newW;
+    canvas.height = newH;
+    state.renderWidth = newW;
+    state.renderHeight = newH;
+
+    // Update resolution display
+    document.getElementById('res-display').textContent =
+      `${newW}x${newH} (${Math.round(state.quality * 100)}%)`;
+
+    // Invalidate FBOs
+    if (state.fboA) { state.gl.deleteTexture(state.fboA.tex); state.gl.deleteFramebuffer(state.fboA.fbo); state.fboA = null; }
+    if (state.fboB) { state.gl.deleteTexture(state.fboB.tex); state.gl.deleteFramebuffer(state.fboB.fbo); state.fboB = null; }
+    if (state.fboPrev) { state.gl.deleteTexture(state.fboPrev.tex); state.gl.deleteFramebuffer(state.fboPrev.fbo); state.fboPrev = null; }
+    if (state.fboPrevAlt) { state.gl.deleteTexture(state.fboPrevAlt.tex); state.gl.deleteFramebuffer(state.fboPrevAlt.fbo); state.fboPrevAlt = null; }
+  }
+}
+
+
+// ============================================================================
+// BENCHMARK
+// ============================================================================
+
+function runBenchmark() {
+  return new Promise(resolve => {
+    // Compile benchmark shader
+    const result = buildAndLinkShader(BENCHMARK_SHADER_BODY);
+    if (!result.success) {
+      console.warn('[SHADE] Benchmark shader failed, defaulting quality 0.75');
+      resolve(0.75);
+      return;
+    }
+
+    const gl = state.gl;
+    const program = result.program;
+
+    // Set up canvas at full resolution for the test
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.floor(window.innerWidth * dpr);
+    const h = Math.floor(window.innerHeight * dpr);
+    state.canvas.width = w;
+    state.canvas.height = h;
+    state.renderWidth = w;
+    state.renderHeight = h;
+
+    let frameCount = 0;
+    const times = [];
+
+    function benchFrame() {
+      const t0 = performance.now();
+
+      gl.viewport(0, 0, w, h);
+      gl.useProgram(program);
+
+      // Set minimal uniforms for benchmark
+      const uTime = gl.getUniformLocation(program, 'u_time');
+      const uRes = gl.getUniformLocation(program, 'u_resolution');
+      if (uTime) gl.uniform1f(uTime, frameCount * 0.016);
+      if (uRes) gl.uniform2f(uRes, w, h);
+
+      // Set remaining uniforms to defaults to avoid warnings
+      const uQuality = gl.getUniformLocation(program, 'u_quality');
+      if (uQuality) gl.uniform1f(uQuality, 1.0);
+      const uFrame = gl.getUniformLocation(program, 'u_frame');
+      if (uFrame) gl.uniform1i(uFrame, frameCount);
+
+      // Zero out audio uniforms
+      const audioNames = ['u_bass','u_mid','u_high','u_energy','u_peak',
+                          'u_param1','u_param2','u_param3','u_param4',
+                          'u_intensity','u_speed','u_transition',
+                          'u_bpm','u_beat','u_bar'];
+      for (const name of audioNames) {
+        const loc = gl.getUniformLocation(program, name);
+        if (loc) gl.uniform1f(loc, 0.0);
+      }
+
+      // Color defaults
+      const cNames = ['u_color1','u_color2','u_color3','u_bg'];
+      const cDefaults = [DEFAULT_PALETTE.color1, DEFAULT_PALETTE.color2, DEFAULT_PALETTE.color3, DEFAULT_PALETTE.bg];
+      for (let i = 0; i < cNames.length; i++) {
+        const loc = gl.getUniformLocation(program, cNames[i]);
+        if (loc) gl.uniform3fv(loc, cDefaults[i]);
+      }
+
+      drawQuad();
+      gl.finish(); // Force GPU sync for accurate timing
+
+      const elapsed = performance.now() - t0;
+      times.push(elapsed);
+      frameCount++;
+
+      if (frameCount < BENCHMARK_FRAMES) {
+        requestAnimationFrame(benchFrame);
+      } else {
+        gl.deleteProgram(program);
+
+        const avg = times.reduce((a, b) => a + b, 0) / times.length;
+        let quality;
+        if (avg < 8) quality = 1.0;
+        else if (avg < 16) quality = 0.75;
+        else if (avg < 33) quality = 0.5;
+        else quality = 0.3;
+
+        console.log(`[SHADE] Benchmark: avg ${avg.toFixed(2)}ms/frame -> quality ${quality}`);
+        resolve(quality);
+      }
+    }
+
+    requestAnimationFrame(benchFrame);
+  });
+}
+
+
+// ============================================================================
+// AUDIO ENGINE
+// ============================================================================
+
+function initAudioContext() {
+  if (state.audioCtx) return;
+
+  state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  state.analyser = state.audioCtx.createAnalyser();
+  state.analyser.fftSize = FFT_SIZE;
+  state.analyser.smoothingTimeConstant = 0.4;
+
+  state.fftData = new Uint8Array(state.analyser.frequencyBinCount);
+  state.timeData = new Uint8Array(state.analyser.fftSize);
+
+  // Create FFT texture for Tier A
+  if (state.isWebGL2) {
+    createFFTTexture();
+  }
+}
+
+
+function createFFTTexture() {
+  const gl = state.gl;
+  state.fftTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, state.fftTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 256, 2, 0, gl.RED, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+
+function updateFFTTexture() {
+  if (!state.isWebGL2 || !state.fftTexture || !state.analyser) return;
+
+  const gl = state.gl;
+  const bins = state.analyser.frequencyBinCount;
+
+  // Row 0: FFT data (padded/truncated to 256)
+  const fftRow = new Uint8Array(256);
+  const fftLen = Math.min(bins, 256);
+  state.analyser.getByteFrequencyData(state.fftData);
+  fftRow.set(state.fftData.subarray(0, fftLen));
+
+  // Row 1: Waveform data (padded/truncated to 256)
+  const waveRow = new Uint8Array(256);
+  state.analyser.getByteTimeDomainData(state.timeData);
+  const waveLen = Math.min(state.timeData.length, 256);
+  waveRow.set(state.timeData.subarray(0, waveLen));
+
+  // Upload as 256x2 texture
+  const combined = new Uint8Array(512);
+  combined.set(fftRow, 0);
+  combined.set(waveRow, 256);
+
+  gl.bindTexture(gl.TEXTURE_2D, state.fftTexture);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 2, gl.RED, gl.UNSIGNED_BYTE, combined);
+}
+
+
+async function startMicrophone() {
+  try {
+    initAudioContext();
+    if (state.audioCtx.state === 'suspended') await state.audioCtx.resume();
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (state.audioSource) {
+      state.audioSource.disconnect();
+    }
+    state.audioSource = state.audioCtx.createMediaStreamSource(stream);
+    state.audioSource.connect(state.analyser);
+    state.audioMode = 'mic';
+    state.audioActive = true;
+    state.audioFadeCounter = 0;
+
+    updateAudioBadge();
+    console.log('[SHADE] Microphone active');
+  } catch (err) {
+    console.error('[SHADE] Microphone error:', err);
+  }
+}
+
+
+function loadAudioFile(file) {
+  initAudioContext();
+
+  if (state.audioElement) {
+    state.audioElement.pause();
+    state.audioElement.remove();
+  }
+  if (state.audioSource) {
+    state.audioSource.disconnect();
+  }
+
+  const url = URL.createObjectURL(file);
+  state.audioElement = new Audio();
+  state.audioElement.crossOrigin = 'anonymous';
+  state.audioElement.src = url;
+
+  state.audioSource = state.audioCtx.createMediaElementSource(state.audioElement);
+  state.audioSource.connect(state.analyser);
+  state.analyser.connect(state.audioCtx.destination);
+
+  state.audioElement.play();
+  state.audioMode = 'file';
+  state.audioActive = true;
+  state.audioFadeCounter = 0;
+
+  updateAudioBadge();
+  console.log('[SHADE] Audio file loaded:', file.name);
+}
+
+
+function stopAudio() {
+  if (state.audioSource) {
+    state.audioSource.disconnect();
+    state.audioSource = null;
+  }
+  if (state.audioElement) {
+    state.audioElement.pause();
+    state.audioElement = null;
+  }
+  state.audioMode = 'silent';
+  state.audioActive = false;
+  state.audioFadeCounter = FADE_OUT_FRAMES;
+  updateAudioBadge();
+}
+
+
+function updateAudioBadge() {
+  const badge = document.getElementById('audio-source-badge');
+  badge.className = state.audioMode;
+  badge.textContent = state.audioMode === 'silent' ? 'SILENT'
+                    : state.audioMode === 'mic' ? 'MIC LIVE'
+                    : 'AUDIO FILE';
+}
+
+
+function updateAudioUniforms() {
+  const u = state.uniforms;
+
+  if (state.audioActive && state.analyser) {
+    state.analyser.getByteFrequencyData(state.fftData);
+    state.analyser.getByteTimeDomainData(state.timeData);
+
+    const bins = state.fftData;
+    const gain = state.audioGainBoost;
+    const smooth = state.audioSmoothing;
+
+    // Bass: bins 0-3
+    let bass = 0;
+    for (let i = 0; i < 4 && i < bins.length; i++) bass += bins[i];
+    bass = Math.min(1.0, (bass / (4 * 255)) * gain);
+
+    // Mid: bins 4-12
+    let mid = 0;
+    for (let i = 4; i < 13 && i < bins.length; i++) mid += bins[i];
+    mid = Math.min(1.0, (mid / (9 * 255)) * gain);
+
+    // High: bins 13-31
+    let high = 0;
+    for (let i = 13; i < 32 && i < bins.length; i++) high += bins[i];
+    high = Math.min(1.0, (high / (19 * 255)) * gain);
+
+    // RMS energy from time domain
+    let rms = 0;
+    for (let i = 0; i < state.timeData.length; i++) {
+      const v = (state.timeData[i] - 128) / 128;
+      rms += v * v;
+    }
+    rms = Math.min(1.0, Math.sqrt(rms / state.timeData.length) * gain * 2.0);
+
+    // Peak detection
+    const currentPeak = Math.max(bass, mid, high, rms);
+    const newPeak = Math.max(currentPeak, u.peak * state.audioPeakDecay);
+
+    // 16-band spectrum
+    const spectrum = new Float32Array(16);
+    const binsPerBand = Math.floor(bins.length / 16);
+    for (let b = 0; b < 16; b++) {
+      let sum = 0;
+      const start = b * binsPerBand;
+      const count = Math.min(binsPerBand, bins.length - start);
+      for (let i = 0; i < count; i++) {
+        sum += bins[start + i];
+      }
+      spectrum[b] = Math.min(1.0, (sum / (count * 255)) * gain);
+    }
+
+    // Apply smoothing
+    u.bass = u.bass * smooth + bass * (1.0 - smooth);
+    u.mid = u.mid * smooth + mid * (1.0 - smooth);
+    u.high = u.high * smooth + high * (1.0 - smooth);
+    u.energy = u.energy * smooth + rms * (1.0 - smooth);
+    u.peak = newPeak;
+
+    for (let i = 0; i < 16; i++) {
+      u.spectrum[i] = u.spectrum[i] * smooth + spectrum[i] * (1.0 - smooth);
+    }
+
+    // Update FFT texture for Tier A
+    if (state.isWebGL2) {
+      updateFFTTexture();
+    }
+
+  } else if (state.audioFadeCounter > 0) {
+    // Fade to zero smoothly
+    const fade = 1.0 - (1.0 / FADE_OUT_FRAMES);
+    u.bass *= fade;
+    u.mid *= fade;
+    u.high *= fade;
+    u.energy *= fade;
+    u.peak *= fade;
+    for (let i = 0; i < 16; i++) u.spectrum[i] *= fade;
+    state.audioFadeCounter--;
+
+    if (state.audioFadeCounter === 0) {
+      u.bass = 0; u.mid = 0; u.high = 0; u.energy = 0; u.peak = 0;
+      u.spectrum.fill(0);
+    }
+  }
+}
+
+
+function processAudioBindings() {
+  const u = state.uniforms;
+
+  for (const binding of state.audioBindings) {
+    let sourceVal = 0;
+    switch (binding.source) {
+      case 'bass':   sourceVal = u.bass;   break;
+      case 'mid':    sourceVal = u.mid;    break;
+      case 'high':   sourceVal = u.high;   break;
+      case 'energy': sourceVal = u.energy; break;
+      case 'peak':   sourceVal = u.peak;   break;
+      default:
+        if (binding.source.startsWith('spectrum_')) {
+          const idx = parseInt(binding.source.split('_')[1]);
+          if (idx >= 0 && idx < 16) sourceVal = u.spectrum[idx];
+        }
+        break;
+    }
+
+    const mapped = sourceVal * (binding.multiplier || 1.0) + (binding.offset || 0.0);
+    const smooth = binding.smoothing || 0.5;
+
+    switch (binding.target) {
+      case 'param1': u.param1 = u.param1 * smooth + mapped * (1 - smooth); break;
+      case 'param2': u.param2 = u.param2 * smooth + mapped * (1 - smooth); break;
+      case 'param3': u.param3 = u.param3 * smooth + mapped * (1 - smooth); break;
+      case 'param4': u.param4 = u.param4 * smooth + mapped * (1 - smooth); break;
+      case 'intensity': u.intensity = u.intensity * smooth + mapped * (1 - smooth); break;
+      case 'speed': u.speed = u.speed * smooth + mapped * (1 - smooth); break;
+    }
+  }
+}
+
+
+// ============================================================================
+// WEBSOCKET CLIENT
+// ============================================================================
+
+function connectWS() {
+  if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  try {
+    state.ws = new WebSocket(WS_URL);
+  } catch (e) {
+    console.warn('[SHADE] WebSocket connection failed');
+    scheduleReconnect();
+    return;
+  }
+
+  state.ws.onopen = () => {
+    console.log('[SHADE] WebSocket connected');
+    state.wsConnected = true;
+    updateWSStatus();
+    if (state.wsReconnectTimer) {
+      clearTimeout(state.wsReconnectTimer);
+      state.wsReconnectTimer = null;
+    }
+
+    // Send ready
+    sendWS({
+      type: 'ready',
+      tier: state.isWebGL2 ? 'A' : 'B',
+      quality: state.quality,
+      resolution: [state.renderWidth, state.renderHeight],
+    });
+  };
+
+  state.ws.onclose = () => {
+    console.log('[SHADE] WebSocket disconnected');
+    state.wsConnected = false;
+    updateWSStatus();
+    scheduleReconnect();
+  };
+
+  state.ws.onerror = (err) => {
+    console.warn('[SHADE] WebSocket error');
+    state.wsConnected = false;
+    updateWSStatus();
+  };
+
+  state.ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleWSMessage(msg);
+    } catch (err) {
+      console.warn('[SHADE] Invalid WS message:', err);
+    }
+  };
+}
+
+
+function scheduleReconnect() {
+  if (state.wsReconnectTimer) return;
+  state.wsReconnectTimer = setTimeout(() => {
+    state.wsReconnectTimer = null;
+    connectWS();
+  }, WS_RECONNECT_MS);
+}
+
+
+function sendWS(data) {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify(data));
+  }
+}
+
+
+function updateWSStatus() {
+  const el = document.getElementById('ws-status');
+  if (state.wsConnected) {
+    el.textContent = 'CONNECTED';
+    el.className = 'connected';
+  } else {
+    el.textContent = 'DISCONNECTED';
+    el.className = 'disconnected';
+  }
+}
+
+
+function handleWSMessage(msg) {
+  switch (msg.type) {
+    case 'shader_push':
+      pushShader(msg.code, msg.id, 0);
+      break;
+
+    case 'shader_crossfade':
+      pushShader(msg.code, msg.id, msg.duration || 1.0);
+      break;
+
+    case 'param_set':
+      setParam(msg.name, msg.value);
+      break;
+
+    case 'palette_set':
+      if (msg.colors) setPalette(msg.colors);
+      break;
+
+    case 'audio_config':
+      if (msg.config) {
+        if (msg.config.smoothing !== undefined) state.audioSmoothing = msg.config.smoothing;
+        if (msg.config.peakDecay !== undefined) state.audioPeakDecay = msg.config.peakDecay;
+        if (msg.config.gainBoost !== undefined) state.audioGainBoost = msg.config.gainBoost;
+      }
+      break;
+
+    case 'get_state':
+      sendWS({
+        type: 'state',
+        tier: state.isWebGL2 ? 'A' : 'B',
+        quality: state.quality,
+        resolution: [state.renderWidth, state.renderHeight],
+        fps: getAverageFPS(),
+        shader: state.currentShaderId,
+        audio: state.audioMode,
+        uniforms: {
+          bass: state.uniforms.bass,
+          mid: state.uniforms.mid,
+          high: state.uniforms.high,
+          energy: state.uniforms.energy,
+          peak: state.uniforms.peak,
+          param1: state.uniforms.param1,
+          param2: state.uniforms.param2,
+          param3: state.uniforms.param3,
+          param4: state.uniforms.param4,
+          intensity: state.uniforms.intensity,
+          speed: state.uniforms.speed,
+          bpm: state.uniforms.bpm,
+        },
+        wsConnected: state.wsConnected,
+      });
+      break;
+
+    case 'ext_set':
+      if (msg.channel >= 0 && msg.channel < 16) {
+        state.uniforms.ext[msg.channel] = msg.value || 0;
+      }
+      break;
+
+    case 'ext_xy_set':
+      if (msg.channel >= 0 && msg.channel < 4) {
+        state.uniforms.ext_xy[msg.channel * 2] = msg.x || 0;
+        state.uniforms.ext_xy[msg.channel * 2 + 1] = msg.y || 0;
+      }
+      break;
+
+    case 'bpm_set':
+      if (msg.bpm > 0) state.uniforms.bpm = msg.bpm;
+      break;
+
+    case 'shader_validate':
+      validateShader(msg.code, msg.id);
+      break;
+
+    case 'audio_bind':
+      if (msg.binding) {
+        // Remove existing binding for this target
+        state.audioBindings = state.audioBindings.filter(b => b.target !== msg.binding.target);
+        state.audioBindings.push(msg.binding);
+      }
+      break;
+
+    case 'audio_unbind':
+      if (msg.target) {
+        state.audioBindings = state.audioBindings.filter(b => b.target !== msg.target);
+      }
+      break;
+
+    case 'perform_blackout':
+      state.blackout = true;
+      // Auto-release after 0.5s fade + hold, or on next shader push
+      setTimeout(() => { state.blackout = false; }, 2000);
+      break;
+
+    case 'perform_flash':
+      triggerFlash(msg.color || [1,1,1], msg.duration || 0.1);
+      break;
+
+    case 'chapter_info':
+      if (msg.name !== undefined) state.chapterName = msg.name;
+      if (msg.progress !== undefined) state.chapterProgress = msg.progress;
+      updateChapterHUD();
+      break;
+
+    case 'layer_push':
+    case 'layer_remove':
+      // Future: multi-layer compositing
+      console.log('[SHADE] Layer command (not yet implemented):', msg.type);
+      break;
+
+    case 'capture_start':
+      startRecording();
+      break;
+
+    case 'capture_stop':
+      stopRecording();
+      break;
+
+    case 'capture_screenshot':
+      takeScreenshot();
+      break;
+
+    default:
+      console.log('[SHADE] Unknown message type:', msg.type);
+  }
+}
+
+
+function setParam(name, value) {
+  const u = state.uniforms;
+  switch (name) {
+    case 'param1': u.param1 = value; break;
+    case 'param2': u.param2 = value; break;
+    case 'param3': u.param3 = value; break;
+    case 'param4': u.param4 = value; break;
+    case 'intensity': u.intensity = value; break;
+    case 'speed': u.speed = value; break;
+    case 'bpm': u.bpm = value; break;
+    default:
+      // Handle ext channels
+      if (name.startsWith('ext_')) {
+        const idx = parseInt(name.split('_')[1]);
+        if (idx >= 0 && idx < 16) u.ext[idx] = value;
+      }
+      break;
+  }
+}
+
+
+function setPalette(colors) {
+  const u = state.uniforms;
+  if (colors.color1) u.color1.set(colors.color1);
+  if (colors.color2) u.color2.set(colors.color2);
+  if (colors.color3) u.color3.set(colors.color3);
+  if (colors.bg) u.bg.set(colors.bg);
+}
+
+
+// ============================================================================
+// FLASH & BLACKOUT
+// ============================================================================
+
+function triggerFlash(color, duration) {
+  const overlay = document.getElementById('flash-overlay');
+  const r = Math.round((color[0] || 1) * 255);
+  const g = Math.round((color[1] || 1) * 255);
+  const b = Math.round((color[2] || 1) * 255);
+
+  overlay.style.backgroundColor = `rgb(${r},${g},${b})`;
+  overlay.style.opacity = '1';
+  overlay.style.transition = 'none';
+
+  // Force reflow
+  overlay.offsetHeight;
+
+  overlay.style.transition = `opacity ${duration}s ease-out`;
+  overlay.style.opacity = '0';
+}
+
+
+// ============================================================================
+// HUD
+// ============================================================================
+
+function getAverageFPS() {
+  if (state.fpsHistory.length === 0) return 0;
+  return state.fpsHistory.reduce((a, b) => a + b, 0) / state.fpsHistory.length;
+}
+
+
+function updateHUD() {
+  const fps = getAverageFPS();
+  document.getElementById('fps-display').textContent = Math.round(fps);
+
+  // Audio meters
+  const u = state.uniforms;
+  const scale = 24; // max height in px
+  document.getElementById('meter-bass').style.height = (u.bass * scale) + 'px';
+  document.getElementById('meter-bass2').style.height = (u.bass * scale * 0.7) + 'px';
+  document.getElementById('meter-mid').style.height = (u.mid * scale) + 'px';
+  document.getElementById('meter-mid2').style.height = (u.mid * scale * 0.8) + 'px';
+  document.getElementById('meter-mid3').style.height = (u.mid * scale * 0.6) + 'px';
+  document.getElementById('meter-high').style.height = (u.high * scale) + 'px';
+  document.getElementById('meter-high2').style.height = (u.high * scale * 0.7) + 'px';
+
+  // Blackout visual
+  if (state.blackoutValue > 0.001) {
+    state.canvas.style.opacity = (1.0 - state.blackoutValue).toString();
+  } else {
+    state.canvas.style.opacity = '1';
+  }
+}
+
+
+function updateChapterHUD() {
+  const bottom = document.getElementById('hud-bottom');
+  if (state.chapterName || state.chapterProgress > 0) {
+    bottom.style.display = 'block';
+    document.getElementById('chapter-label').textContent = state.chapterName;
+    document.getElementById('chapter-fill').style.width = (state.chapterProgress * 100) + '%';
+  } else {
+    bottom.style.display = 'none';
+  }
+}
+
+
+// ============================================================================
+// RECORDING & SCREENSHOTS
+// ============================================================================
+
+function startRecording() {
+  if (state.recording) return;
+
+  try {
+    const stream = state.canvas.captureStream(30);
+    state.mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 8000000,
+    });
+
+    state.recordedChunks = [];
+    state.mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) state.recordedChunks.push(e.data);
+    };
+
+    state.mediaRecorder.onstop = () => {
+      const blob = new Blob(state.recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `shade-capture-${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      state.recordedChunks = [];
+    };
+
+    state.mediaRecorder.start(100);
+    state.recording = true;
+    document.getElementById('rec-dot').style.display = 'block';
+    console.log('[SHADE] Recording started');
+  } catch (err) {
+    console.error('[SHADE] Recording error:', err);
+  }
+}
+
+
+function stopRecording() {
+  if (!state.recording || !state.mediaRecorder) return;
+  state.mediaRecorder.stop();
+  state.recording = false;
+  document.getElementById('rec-dot').style.display = 'none';
+  console.log('[SHADE] Recording stopped');
+}
+
+
+function takeScreenshot() {
+  const dataURL = state.canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = dataURL;
+  a.download = `shade-screenshot-${Date.now()}.png`;
+  a.click();
+
+  sendWS({ type: 'screenshot_taken', timestamp: Date.now() });
+  console.log('[SHADE] Screenshot taken');
+}
+
+
+// ============================================================================
+// LIVE EDITOR
+// ============================================================================
+
+function toggleEditor() {
+  state.editorVisible = !state.editorVisible;
+  const panel = document.getElementById('editor-panel');
+
+  if (state.editorVisible) {
+    panel.classList.add('visible');
+    const textarea = document.getElementById('editor-textarea');
+    textarea.value = state.currentShaderCode || DEFAULT_SHADER_BODY;
+    textarea.focus();
+  } else {
+    panel.classList.remove('visible');
+  }
+}
+
+
+function compileFromEditor() {
+  const code = document.getElementById('editor-textarea').value;
+  const success = pushShader(code, 'live-edit', 0);
+  if (success) {
+    clearEditorError();
+  }
+}
+
+
+function showEditorError(error) {
+  const el = document.getElementById('editor-error');
+  el.textContent = error;
+  el.style.display = 'block';
+}
+
+
+function clearEditorError() {
+  const el = document.getElementById('editor-error');
+  el.textContent = '';
+  el.style.display = 'none';
+}
+
+
+// ============================================================================
+// KEYBOARD SHORTCUTS
+// ============================================================================
+
+function initKeyboard() {
+  document.addEventListener('keydown', (e) => {
+    // Don't capture when editor textarea is focused, except for Ctrl combos and Escape
+    const editorFocused = document.activeElement === document.getElementById('editor-textarea');
+
+    if (editorFocused) {
+      // Ctrl+Enter in editor: compile
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        compileFromEditor();
+        return;
+      }
+      // Escape: close editor
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        toggleEditor();
+        return;
+      }
+      // Tab in editor: insert 2 spaces
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const ta = document.getElementById('editor-textarea');
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+        ta.selectionStart = ta.selectionEnd = start + 2;
+        return;
+      }
+      return; // Let other keys pass through to editor
+    }
+
+    switch (e.key.toLowerCase()) {
+      case 'h':
+        state.hudVisible = !state.hudVisible;
+        document.getElementById('hud').classList.toggle('hidden', !state.hudVisible);
+        break;
+
+      case 'f':
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen();
+        }
+        break;
+
+      case 'r':
+        if (state.recording) stopRecording();
+        else startRecording();
+        break;
+
+      case 's':
+        takeScreenshot();
+        break;
+
+      case 'e':
+        toggleEditor();
+        break;
+
+      case ' ':
+        e.preventDefault();
+        if (state.audioElement) {
+          if (state.audioElement.paused) {
+            state.audioElement.play();
+          } else {
+            state.audioElement.pause();
+          }
+        }
+        break;
+
+      case 'm':
+        // Toggle mic
+        if (state.audioMode === 'mic') {
+          stopAudio();
+        } else {
+          startMicrophone();
+        }
+        break;
+
+      default:
+        // 1-9: setlist chapter jump
+        if (e.key >= '1' && e.key <= '9') {
+          const chapter = parseInt(e.key);
+          sendWS({ type: 'chapter_jump', chapter });
+        }
+        break;
+    }
+  });
+}
+
+
+// ============================================================================
+// DRAG & DROP
+// ============================================================================
+
+function initDragDrop() {
+  const dropZone = document.getElementById('drop-zone');
+  let dragCounter = 0;
+
+  document.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    if (dragCounter === 1) {
+      dropZone.classList.add('active');
+    }
+  });
+
+  document.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+      dropZone.classList.remove('active');
+    }
+  });
+
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropZone.classList.remove('active');
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|flac|aac|m4a|webm)$/i)) {
+        loadAudioFile(file);
+      } else {
+        console.warn('[SHADE] Not an audio file:', file.name);
+      }
+    }
+  });
+}
+
+
+// ============================================================================
+// AUDIO LEVEL REPORTING
+// ============================================================================
+
+function startAudioReporting() {
+  setInterval(() => {
+    if (state.wsConnected && state.audioActive) {
+      const u = state.uniforms;
+      sendWS({
+        type: 'audio_levels',
+        bass: Math.round(u.bass * 1000) / 1000,
+        mid: Math.round(u.mid * 1000) / 1000,
+        high: Math.round(u.high * 1000) / 1000,
+        energy: Math.round(u.energy * 1000) / 1000,
+        peak: Math.round(u.peak * 1000) / 1000,
+        spectrum: Array.from(u.spectrum).map(v => Math.round(v * 1000) / 1000),
+      });
+    }
+  }, AUDIO_SEND_INTERVAL);
+}
+
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+async function init() {
+  console.log('[SHADE] Initializing...');
+
+  // Init WebGL
+  if (!initWebGL()) return;
+
+  // Run benchmark
+  state.quality = await runBenchmark();
+
+  // Apply quality to canvas
+  handleResize();
+
+  // Compile default shader
+  pushShader(DEFAULT_SHADER_BODY, 'default', 0);
+
+  // Init systems
+  initKeyboard();
+  initDragDrop();
+  startAudioReporting();
+
+  // Connect WebSocket
+  connectWS();
+
+  // Start render loop
+  state.startTime = 0;
+  state.lastFrameTime = 0;
+  requestAnimationFrame(render);
+
+  // Editor compile button
+  document.getElementById('btn-compile').addEventListener('click', compileFromEditor);
+
+  console.log('[SHADE] Ready');
+}
+
+
+// Wait for DOM
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+})();
+</script>
+
+</body>
+</html>

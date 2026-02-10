@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>shade-conductor | output</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;cursor:none}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+/**
+ * shade-conductor OUTPUT view
+ * Fullscreen shader canvas for projection / stream capture.
+ * Connects to the same WebSocket as the main UI but renders
+ * without any HUD, editor, or controls — pure visuals only.
+ */
+const WS_PORT = 3334;
+const canvas = document.getElementById('c');
+let gl, program, startTime, animFrame;
+let tier = 'B'; // default WebGL1
+
+// --- Uniforms state ---
+const ext = new Float32Array(16);
+const extXY = Array.from({length:4}, () => ({x:0, y:0}));
+let bpm = 120, uTime = 0, uBeat = 0;
+const params = new Float32Array(4);
+const palette = {primary:[1,0,0.3], secondary:[0,0.5,1], accent:[1,1,0]};
+let intensity = 1, speed = 1;
+
+// Audio state
+const audio = {bass:0, mid:0, high:0, energy:0, peak:0, spectrum: new Float32Array(16)};
+
+// Previous frame (Tier A only)
+let fbos = [null, null], fboIdx = 0;
+
+// --- WebGL init ---
+function initGL() {
+  gl = canvas.getContext('webgl2');
+  if (gl) { tier = 'A'; } else {
+    gl = canvas.getContext('webgl');
+    tier = 'B';
+  }
+  if (!gl) { document.body.style.background = '#200'; return false; }
+  resize();
+  window.addEventListener('resize', resize);
+  if (tier === 'A') initFBOs();
+  return true;
+}
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  if (tier === 'A') initFBOs();
+}
+
+function initFBOs() {
+  for (let i = 0; i < 2; i++) {
+    if (fbos[i]) { gl.deleteTexture(fbos[i].tex); gl.deleteFramebuffer(fbos[i].fb); }
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    fbos[i] = {fb, tex};
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// --- Shader compilation ---
+let currentFrag = null;
+
+function compileShader(fragSrc) {
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  const vsrc = tier === 'A'
+    ? '#version 300 es\nin vec2 a_pos;void main(){gl_Position=vec4(a_pos,0,1);}'
+    : 'attribute vec2 a_pos;void main(){gl_Position=vec4(a_pos,0,1);}';
+  gl.shaderSource(vs, vsrc);
+  gl.compileShader(vs);
+
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, fragSrc);
+  gl.compileShader(fs);
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+    console.error('[output] frag compile:', gl.getShaderInfoLog(fs));
+    gl.deleteShader(vs); gl.deleteShader(fs);
+    return null;
+  }
+
+  const p = gl.createProgram();
+  gl.attachShader(p, vs); gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    console.error('[output] link:', gl.getProgramInfoLog(p));
+    gl.deleteProgram(p); gl.deleteShader(vs); gl.deleteShader(fs);
+    return null;
+  }
+
+  // Fullscreen quad
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(p, 'a_pos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+  if (program) gl.deleteProgram(program);
+  program = p;
+  currentFrag = fragSrc;
+  return p;
+}
+
+// --- Uniform upload ---
+function uploadUniforms() {
+  if (!program) return;
+  gl.useProgram(program);
+  const u = (n) => gl.getUniformLocation(program, n);
+
+  gl.uniform1f(u('u_time'), uTime);
+  gl.uniform2f(u('u_resolution'), canvas.width, canvas.height);
+  gl.uniform1f(u('u_bpm'), bpm);
+  gl.uniform1f(u('u_beat'), uBeat);
+
+  gl.uniform1f(u('u_bass'), audio.bass);
+  gl.uniform1f(u('u_mid'), audio.mid);
+  gl.uniform1f(u('u_high'), audio.high);
+  gl.uniform1f(u('u_energy'), audio.energy);
+  gl.uniform1f(u('u_peak'), audio.peak);
+  gl.uniform1fv(u('u_spectrum'), audio.spectrum);
+
+  gl.uniform3fv(u('u_palette_primary'), palette.primary);
+  gl.uniform3fv(u('u_palette_secondary'), palette.secondary);
+  gl.uniform3fv(u('u_palette_accent'), palette.accent);
+
+  gl.uniform1fv(u('u_params'), params);
+  gl.uniform1f(u('u_intensity'), intensity);
+  gl.uniform1f(u('u_speed'), speed);
+  gl.uniform1fv(u('u_ext'), ext);
+
+  for (let i = 0; i < 4; i++) {
+    gl.uniform2f(u(`u_ext_xy[${i}]`), extXY[i].x, extXY[i].y);
+  }
+
+  // Previous frame (Tier A)
+  if (tier === 'A' && fbos[0]) {
+    const prevIdx = 1 - fboIdx;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, fbos[prevIdx].tex);
+    gl.uniform1i(u('u_prev_frame'), 0);
+  }
+}
+
+// --- Render loop ---
+function render(ts) {
+  animFrame = requestAnimationFrame(render);
+  if (!program) return;
+
+  uTime = (ts - startTime) / 1000 * speed;
+  uBeat = (uTime * bpm / 60) % 1;
+
+  if (tier === 'A' && fbos[0]) {
+    // Render to FBO
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[fboIdx].fb);
+    uploadUniforms();
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // Blit to screen
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    fboIdx = 1 - fboIdx;
+  } else {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    uploadUniforms();
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+}
+
+// --- WebSocket ---
+let ws, wsRetry;
+function connectWS() {
+  const url = `ws://${location.hostname || 'localhost'}:${WS_PORT}`;
+  ws = new WebSocket(url);
+  ws.onopen = () => { console.log('[output] ws connected'); clearTimeout(wsRetry); };
+  ws.onclose = () => { wsRetry = setTimeout(connectWS, 2000); };
+  ws.onerror = () => {};
+  ws.onmessage = (ev) => {
+    try { handleMsg(JSON.parse(ev.data)); } catch(e) {}
+  };
+}
+
+function handleMsg(msg) {
+  switch(msg.type) {
+    case 'push_shader':
+    case 'crossfade':
+      compileShader(msg.fragmentShader || msg.shader);
+      break;
+    case 'ext_set':
+      ext[msg.channel] = msg.value;
+      break;
+    case 'ext_xy_set':
+      extXY[msg.channel] = {x: msg.x, y: msg.y};
+      break;
+    case 'bpm_set':
+      bpm = msg.bpm;
+      break;
+    case 'set_param':
+      if (msg.index >= 0 && msg.index < 4) params[msg.index] = msg.value;
+      break;
+    case 'set_palette':
+      if (msg.primary) palette.primary = msg.primary;
+      if (msg.secondary) palette.secondary = msg.secondary;
+      if (msg.accent) palette.accent = msg.accent;
+      break;
+    case 'set_intensity':
+      intensity = msg.value;
+      break;
+    case 'set_speed':
+      speed = msg.value;
+      break;
+    case 'blackout':
+      if (msg.enabled) {
+        compileShader(tier === 'A'
+          ? '#version 300 es\nprecision mediump float;out vec4 o;void main(){o=vec4(0,0,0,1);}'
+          : 'precision mediump float;void main(){gl_FragColor=vec4(0,0,0,1);}');
+      }
+      break;
+    case 'audio_levels':
+      if (msg.levels) Object.assign(audio, msg.levels);
+      break;
+    case 'get_state':
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({type:'state', data:{
+          currentShader: null,
+          fps: 60,
+          tier,
+          resolution: [canvas.width, canvas.height],
+          audioActive: false,
+        }}));
+      }
+      break;
+    case 'ready':
+      break;
+  }
+}
+
+// --- Init ---
+if (initGL()) {
+  startTime = performance.now();
+  // Default: black until shader is pushed
+  compileShader(tier === 'A'
+    ? '#version 300 es\nprecision mediump float;out vec4 o;uniform float u_time;void main(){float t=u_time;o=vec4(vec3(0.01+0.005*sin(t)),1);}'
+    : 'precision mediump float;uniform float u_time;void main(){float t=u_time;gl_FragColor=vec4(vec3(0.01+0.005*sin(t)),1);}');
+  render(startTime);
+  connectWS();
+}
+</script>
+</body>
+</html>

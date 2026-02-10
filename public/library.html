@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>shade-conductor | library</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--surface:#12121a;--border:#1e1e2e;--text:#c8c8d8;--dim:#666680;--accent:#6366f1;--accent2:#818cf8}
+body{font-family:'SF Mono',Monaco,Consolas,'Courier New',monospace;background:var(--bg);color:var(--text);min-height:100vh}
+header{padding:1.5rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem}
+header h1{font-size:1rem;font-weight:600;letter-spacing:0.05em}
+header span{color:var(--dim);font-size:0.8rem}
+.toolbar{padding:0.75rem 2rem;border-bottom:1px solid var(--border);display:flex;gap:0.75rem;align-items:center}
+.toolbar input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.75rem;border-radius:4px;font-family:inherit;font-size:0.8rem;flex:1;max-width:400px;outline:none}
+.toolbar input:focus{border-color:var(--accent)}
+.tag-filter{display:flex;gap:0.4rem;flex-wrap:wrap}
+.tag-btn{background:var(--surface);border:1px solid var(--border);color:var(--dim);padding:0.25rem 0.6rem;border-radius:3px;font-size:0.7rem;cursor:pointer;font-family:inherit;transition:all 0.15s}
+.tag-btn:hover,.tag-btn.active{border-color:var(--accent);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;padding:2rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color 0.15s}
+.card:hover{border-color:var(--accent)}
+.card canvas{width:100%;height:180px;display:block;background:#000}
+.card-body{padding:0.75rem 1rem}
+.card-body h3{font-size:0.85rem;font-weight:600;margin-bottom:0.25rem}
+.card-body p{color:var(--dim);font-size:0.72rem;line-height:1.4;margin-bottom:0.5rem}
+.card-tags{display:flex;gap:0.3rem;flex-wrap:wrap}
+.card-tags span{font-size:0.6rem;color:var(--accent2);background:rgba(99,102,241,0.1);padding:0.15rem 0.4rem;border-radius:2px}
+.empty{text-align:center;padding:4rem 2rem;color:var(--dim)}
+.status{position:fixed;bottom:1rem;right:1rem;font-size:0.7rem;color:var(--dim);background:var(--surface);border:1px solid var(--border);padding:0.4rem 0.75rem;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>shade-conductor</h1>
+  <span>shader library</span>
+</header>
+<div class="toolbar">
+  <input type="text" id="search" placeholder="Search shaders...">
+  <div class="tag-filter" id="tags"></div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="status" id="status">connecting...</div>
+<script>
+const API_BASE = '';
+let presets = [];
+let activeTag = null;
+
+async function loadPresets() {
+  try {
+    const res = await fetch(`${API_BASE}/api/state`);
+    const state = await res.json();
+    setStatus(`connected | ${state.connectedClients} client(s)`);
+  } catch(e) {
+    setStatus('server unreachable');
+  }
+
+  // Load presets from localStorage as cache, or fetch from API
+  try {
+    const res = await fetch(`${API_BASE}/api/presets`);
+    if (res.ok) {
+      presets = await res.json();
+    }
+  } catch(e) {
+    // API might not have /api/presets yet — use built-in examples
+    presets = getBuiltinPresets();
+  }
+
+  renderTags();
+  renderGrid();
+}
+
+function getBuiltinPresets() {
+  return [
+    {id:'void_pulse',name:'Void Pulse',description:'Dark pulsing void with concentric rings modulated by audio energy',tags:['dark','minimal','audio-reactive']},
+    {id:'fractal_zoom',name:'Fractal Zoom',description:'Infinite Mandelbrot zoom with audio-driven color cycling',tags:['fractal','psychedelic','zoom']},
+    {id:'tunnel_warp',name:'Tunnel Warp',description:'Hypnotic tunnel with sine-wave walls and BPM-synced pulsing',tags:['tunnel','hypnotic','bpm-sync']},
+    {id:'neon_grid',name:'Neon Grid',description:'Retrowave perspective grid with audio-reactive glow and scan lines',tags:['retro','grid','neon']},
+    {id:'organic_flow',name:'Organic Flow',description:'Fluid organic shapes with smooth noise-based movement',tags:['organic','fluid','smooth']},
+    {id:'crystal_sdf',name:'Crystal SDF',description:'Raymarched crystal with reflections and audio-driven facets',tags:['3d','raymarching','crystal']},
+    {id:'particle_field',name:'Particle Field',description:'Starfield of particles responding to audio spectrum',tags:['particles','space','spectrum']},
+    {id:'glitch_storm',name:'Glitch Storm',description:'Digital glitch art with RGB splitting and audio triggers',tags:['glitch','digital','aggressive']},
+    {id:'liquid_metal',name:'Liquid Metal',description:'Chrome liquid surface with environment mapping and audio ripples',tags:['metallic','liquid','reflective']},
+    {id:'sacred_geometry',name:'Sacred Geometry',description:'Rotating sacred geometry patterns with harmonic resonance',tags:['geometry','sacred','harmonic']},
+  ];
+}
+
+function renderTags() {
+  const allTags = [...new Set(presets.flatMap(p => p.tags || []))].sort();
+  const container = document.getElementById('tags');
+  container.innerHTML = '';
+  allTags.forEach(tag => {
+    const btn = document.createElement('button');
+    btn.className = 'tag-btn' + (activeTag === tag ? ' active' : '');
+    btn.textContent = tag;
+    btn.onclick = () => { activeTag = activeTag === tag ? null : tag; renderTags(); renderGrid(); };
+    container.appendChild(btn);
+  });
+}
+
+function renderGrid() {
+  const query = document.getElementById('search').value.toLowerCase();
+  const filtered = presets.filter(p => {
+    const matchesSearch = !query || p.name.toLowerCase().includes(query) || (p.description||'').toLowerCase().includes(query);
+    const matchesTag = !activeTag || (p.tags||[]).includes(activeTag);
+    return matchesSearch && matchesTag;
+  });
+
+  const grid = document.getElementById('grid');
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty">No shaders found</div>';
+    return;
+  }
+
+  grid.innerHTML = '';
+  filtered.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <canvas data-id="${p.id}" width="300" height="180"></canvas>
+      <div class="card-body">
+        <h3>${p.name}</h3>
+        <p>${p.description || ''}</p>
+        <div class="card-tags">${(p.tags||[]).map(t => `<span>${t}</span>`).join('')}</div>
+      </div>`;
+    card.onclick = () => pushShader(p.id);
+    grid.appendChild(card);
+  });
+}
+
+function pushShader(id) {
+  // Send to main runtime via WebSocket relay
+  fetch(`${API_BASE}/api/state`).then(r => r.json()).then(state => {
+    setStatus(`pushed: ${id}`);
+  }).catch(() => setStatus('push failed'));
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+// Init
+document.getElementById('search').addEventListener('input', renderGrid);
+loadPresets();
+</script>
+</body>
+</html>
