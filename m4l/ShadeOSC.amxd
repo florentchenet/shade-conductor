@@ -1,0 +1,579 @@
+ampfaaaametaptch{
+	"patcher" : 	{
+		"fileversion" : 1,
+		"appversion" : 		{
+			"major" : 8,
+			"minor" : 6,
+			"revision" : 5,
+			"architecture" : "x64",
+			"modernui" : 1
+		},
+		"classnamespace" : "box",
+		"rect" : [ 100.0, 100.0, 700.0, 550.0 ],
+		"bglocked" : 0,
+		"openinpresentation" : 1,
+		"default_fontsize" : 12.0,
+		"default_fontface" : 0,
+		"default_fontname" : "Arial",
+		"gridonopen" : 1,
+		"gridsize" : [ 15.0, 15.0 ],
+		"gridsnaponopen" : 1,
+		"objectsnaponopen" : 1,
+		"statusbarvisible" : 2,
+		"toolbarvisible" : 1,
+		"lefttoolbarpinned" : 0,
+		"toptoolbarpinned" : 0,
+		"righttoolbarpinned" : 0,
+		"bottomtoolbarpinned" : 0,
+		"toolbars_unpinned_last_save" : 0,
+		"tallnewobj" : 0,
+		"boxanimatetime" : 200,
+		"enablehscroll" : 1,
+		"enablevscroll" : 1,
+		"devicewidth" : 240.0,
+		"description" : "Shade OSC - Send audio amplitude as OSC to shade-conductor",
+		"digest" : "Audio amplitude to OSC sender for visual reactivity",
+		"tags" : "osc audio amplitude shade",
+		"style" : "",
+		"subpatcher_template" : "",
+		"boxes" : [
+			{
+				"box" : 				{
+					"id" : "obj-plugin",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 2,
+					"outlettype" : [ "signal", "signal" ],
+					"patching_rect" : [ 30.0, 30.0, 75.0, 22.0 ],
+					"text" : "plugin~ 2 2"
+				}
+			},
+			{
+				"box" : 				{
+					"id" : "obj-plugout",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 0,
+					"patching_rect" : [ 30.0, 460.0, 83.0, 22.0 ],
+					"text" : "plugout~ 2 2"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Peak amplitude left channel",
+					"id" : "obj-peakL",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "float" ],
+					"patching_rect" : [ 200.0, 80.0, 80.0, 22.0 ],
+					"text" : "peakamp~ 50"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Peak amplitude right channel",
+					"id" : "obj-peakR",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "float" ],
+					"patching_rect" : [ 300.0, 80.0, 80.0, 22.0 ],
+					"text" : "peakamp~ 50"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Average L+R amplitude",
+					"id" : "obj-avg",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 1,
+					"outlettype" : [ "float" ],
+					"patching_rect" : [ 200.0, 120.0, 120.0, 22.0 ],
+					"text" : "expr ($f1+$f2)*0.5"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Clip to 0-1 range",
+					"id" : "obj-clip",
+					"maxclass" : "newobj",
+					"numinlets" : 3,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 200.0, 155.0, 72.0, 22.0 ],
+					"text" : "clip 0. 1."
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Gate controlled by Active toggle",
+					"id" : "obj-gate",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 200.0, 190.0, 42.0, 22.0 ],
+					"text" : "gate"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Prepend OSC address to amplitude value",
+					"id" : "obj-prepend",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 200.0, 230.0, 130.0, 22.0 ],
+					"text" : "prepend /shade/ext/0"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "UDP sender for OSC messages",
+					"id" : "obj-udpsend",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 0,
+					"patching_rect" : [ 200.0, 270.0, 145.0, 22.0 ],
+					"text" : "udpsend localhost 9000"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Active toggle - enable/disable OSC sending",
+					"id" : "obj-active",
+					"maxclass" : "live.toggle",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"parameter_enable" : 1,
+					"patching_rect" : [ 160.0, 190.0, 15.0, 15.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 215.0, 5.0, 15.0, 15.0 ],
+					"saved_attribute_attributes" : 					{
+						"valueof" : 						{
+							"parameter_initial" : [ 1 ],
+							"parameter_initial_enable" : 1,
+							"parameter_linknames" : 1,
+							"parameter_longname" : "Active",
+							"parameter_mmax" : 1.0,
+							"parameter_shortname" : "Active",
+							"parameter_type" : 2
+						}
+					},
+					"varname" : "Active"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "OSC channel number (0-3)",
+					"id" : "obj-channel",
+					"maxclass" : "live.numbox",
+					"numinlets" : 1,
+					"numoutlets" : 2,
+					"outlettype" : [ "", "float" ],
+					"parameter_enable" : 1,
+					"patching_rect" : [ 430.0, 80.0, 44.0, 15.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 140.0, 50.0, 44.0, 15.0 ],
+					"saved_attribute_attributes" : 					{
+						"valueof" : 						{
+							"parameter_initial" : [ 0 ],
+							"parameter_initial_enable" : 1,
+							"parameter_linknames" : 1,
+							"parameter_longname" : "Channel",
+							"parameter_mmax" : 3.0,
+							"parameter_mmin" : 0.0,
+							"parameter_modmode" : 0,
+							"parameter_shortname" : "Ch",
+							"parameter_type" : 1,
+							"parameter_unitstyle" : 0
+						}
+					},
+					"varname" : "Channel"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "OSC port number",
+					"id" : "obj-port",
+					"maxclass" : "live.numbox",
+					"numinlets" : 1,
+					"numoutlets" : 2,
+					"outlettype" : [ "", "float" ],
+					"parameter_enable" : 1,
+					"patching_rect" : [ 430.0, 140.0, 50.0, 15.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 140.0, 70.0, 50.0, 15.0 ],
+					"saved_attribute_attributes" : 					{
+						"valueof" : 						{
+							"parameter_initial" : [ 9000 ],
+							"parameter_initial_enable" : 1,
+							"parameter_linknames" : 1,
+							"parameter_longname" : "Port",
+							"parameter_mmax" : 65535.0,
+							"parameter_mmin" : 1024.0,
+							"parameter_modmode" : 0,
+							"parameter_shortname" : "Port",
+							"parameter_type" : 1,
+							"parameter_unitstyle" : 0
+						}
+					},
+					"varname" : "Port"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Format OSC address from channel number",
+					"id" : "obj-sprintf",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 430.0, 110.0, 160.0, 22.0 ],
+					"text" : "sprintf symout /shade/ext/%d"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Build 'set' message to update prepend prefix",
+					"id" : "obj-setprefix",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 430.0, 185.0, 135.0, 22.0 ],
+					"text" : "prepend set"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Route symbol output from sprintf",
+					"id" : "obj-route",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 2,
+					"outlettype" : [ "", "" ],
+					"patching_rect" : [ 430.0, 150.0, 100.0, 22.0 ],
+					"text" : "route symbol"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Build 'port' message for udpsend",
+					"id" : "obj-portmsg",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "" ],
+					"patching_rect" : [ 430.0, 230.0, 80.0, 22.0 ],
+					"text" : "prepend port"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Int to truncate port float",
+					"id" : "obj-portint",
+					"maxclass" : "newobj",
+					"numinlets" : 2,
+					"numoutlets" : 1,
+					"outlettype" : [ "int" ],
+					"patching_rect" : [ 430.0, 210.0, 29.0, 22.0 ],
+					"text" : "int"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Level meter display",
+					"id" : "obj-meter",
+					"maxclass" : "live.meter~",
+					"numinlets" : 1,
+					"numoutlets" : 2,
+					"outlettype" : [ "float", "int" ],
+					"patching_rect" : [ 150.0, 80.0, 8.0, 80.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 195.0, 20.0, 8.0, 65.0 ]
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Second meter for stereo",
+					"id" : "obj-meter2",
+					"maxclass" : "live.meter~",
+					"numinlets" : 1,
+					"numoutlets" : 2,
+					"outlettype" : [ "float", "int" ],
+					"patching_rect" : [ 165.0, 80.0, 8.0, 80.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 205.0, 20.0, 8.0, 65.0 ]
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Amplitude display",
+					"id" : "obj-ampdisp",
+					"maxclass" : "live.numbox",
+					"numinlets" : 1,
+					"numoutlets" : 2,
+					"outlettype" : [ "", "float" ],
+					"parameter_enable" : 1,
+					"patching_rect" : [ 200.0, 310.0, 50.0, 15.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 140.0, 25.0, 50.0, 15.0 ],
+					"saved_attribute_attributes" : 					{
+						"valueof" : 						{
+							"parameter_initial" : [ 0 ],
+							"parameter_initial_enable" : 1,
+							"parameter_linknames" : 1,
+							"parameter_longname" : "Amplitude",
+							"parameter_mmax" : 1.0,
+							"parameter_mmin" : 0.0,
+							"parameter_modmode" : 0,
+							"parameter_shortname" : "Amp",
+							"parameter_type" : 0,
+							"parameter_unitstyle" : 1
+						}
+					},
+					"varname" : "Amplitude"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Initialize on load",
+					"id" : "obj-loadbang",
+					"maxclass" : "newobj",
+					"numinlets" : 1,
+					"numoutlets" : 1,
+					"outlettype" : [ "bang" ],
+					"patching_rect" : [ 550.0, 30.0, 58.0, 22.0 ],
+					"text" : "loadbang"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Title",
+					"id" : "obj-title",
+					"maxclass" : "comment",
+					"numinlets" : 1,
+					"numoutlets" : 0,
+					"patching_rect" : [ 30.0, 500.0, 100.0, 20.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 10.0, 3.0, 130.0, 20.0 ],
+					"text" : "ShadeOSC",
+					"fontsize" : 14.0,
+					"fontface" : 1
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Amp label",
+					"id" : "obj-amplabel",
+					"maxclass" : "comment",
+					"numinlets" : 1,
+					"numoutlets" : 0,
+					"patching_rect" : [ 30.0, 520.0, 80.0, 20.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 10.0, 25.0, 130.0, 20.0 ],
+					"text" : "Amplitude:"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Ch label",
+					"id" : "obj-chlabel",
+					"maxclass" : "comment",
+					"numinlets" : 1,
+					"numoutlets" : 0,
+					"patching_rect" : [ 30.0, 540.0, 80.0, 20.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 10.0, 50.0, 130.0, 20.0 ],
+					"text" : "OSC Channel (0-3):"
+				}
+			},
+			{
+				"box" : 				{
+					"comment" : "Port label",
+					"id" : "obj-portlabel",
+					"maxclass" : "comment",
+					"numinlets" : 1,
+					"numoutlets" : 0,
+					"patching_rect" : [ 30.0, 560.0, 80.0, 20.0 ],
+					"presentation" : 1,
+					"presentation_rect" : [ 10.0, 70.0, 130.0, 20.0 ],
+					"text" : "OSC Port:"
+				}
+			}
+		],
+		"lines" : [
+			{
+				"patchline" : 				{
+					"source" : [ "obj-plugin", 0 ],
+					"destination" : [ "obj-plugout", 0 ],
+					"order" : 0
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-plugin", 1 ],
+					"destination" : [ "obj-plugout", 1 ],
+					"order" : 0
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-plugin", 0 ],
+					"destination" : [ "obj-peakL", 0 ],
+					"order" : 1
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-plugin", 1 ],
+					"destination" : [ "obj-peakR", 0 ],
+					"order" : 1
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-plugin", 0 ],
+					"destination" : [ "obj-meter", 0 ],
+					"order" : 2
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-plugin", 1 ],
+					"destination" : [ "obj-meter2", 0 ],
+					"order" : 2
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-peakL", 0 ],
+					"destination" : [ "obj-avg", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-peakR", 0 ],
+					"destination" : [ "obj-avg", 1 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-avg", 0 ],
+					"destination" : [ "obj-clip", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-clip", 0 ],
+					"destination" : [ "obj-gate", 1 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-active", 0 ],
+					"destination" : [ "obj-gate", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-gate", 0 ],
+					"destination" : [ "obj-prepend", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-gate", 0 ],
+					"destination" : [ "obj-ampdisp", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-prepend", 0 ],
+					"destination" : [ "obj-udpsend", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-channel", 0 ],
+					"destination" : [ "obj-sprintf", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-sprintf", 0 ],
+					"destination" : [ "obj-route", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-route", 0 ],
+					"destination" : [ "obj-setprefix", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-setprefix", 0 ],
+					"destination" : [ "obj-prepend", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-port", 0 ],
+					"destination" : [ "obj-portint", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-portint", 0 ],
+					"destination" : [ "obj-portmsg", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-portmsg", 0 ],
+					"destination" : [ "obj-udpsend", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-loadbang", 0 ],
+					"destination" : [ "obj-channel", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-loadbang", 0 ],
+					"destination" : [ "obj-port", 0 ]
+				}
+			},
+			{
+				"patchline" : 				{
+					"source" : [ "obj-loadbang", 0 ],
+					"destination" : [ "obj-active", 0 ]
+				}
+			}
+		],
+		"parameters" : 		{
+			"obj-channel" : [ "Channel", "Ch", 0 ],
+			"obj-port" : [ "Port", "Port", 0 ],
+			"obj-ampdisp" : [ "Amplitude", "Amp", 0 ],
+			"obj-active" : [ "Active", "Active", 0 ],
+			"parameterbanks" : 			{
+				"0" : 				{
+					"index" : 0,
+					"name" : "",
+					"parameters" : [ "Channel", "Port", "Active", "-", "-", "-", "-", "-" ]
+				}
+			},
+			"inherited_shortname" : 1
+		},
+		"dependency_cache" : [  ],
+		"autosave" : 0
+	}
+}
