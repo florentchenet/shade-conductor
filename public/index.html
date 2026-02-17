@@ -1848,7 +1848,11 @@ function handleWSMessage(msg) {
     case 'perform_flash': {
       let flashColor = [1, 1, 1];
       if (typeof msg.color === 'string' && msg.color.startsWith('#')) {
-        const hex = msg.color.replace('#', '');
+        let hex = msg.color.replace('#', '');
+        // Expand 3-char shorthand (#RGB → RRGGBB)
+        if (hex.length === 3) {
+          hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        }
         flashColor = [
           parseInt(hex.substring(0, 2), 16) / 255,
           parseInt(hex.substring(2, 4), 16) / 255,
