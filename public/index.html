@@ -308,7 +308,7 @@ html, body {
 'use strict';
 
 // ── Constants ──
-const WS_URL = 'ws://localhost:3334';
+const WS_URL = `ws://${window.location.hostname || 'localhost'}:3334`;
 const WS_RECONNECT_MS = 2000;
 const AUDIO_SEND_INTERVAL = 100;
 const FPS_SAMPLE_COUNT = 60;
@@ -1945,6 +1945,9 @@ function setParam(name, value) {
 }
 
 
+// Guard map: target → RAF id. Prevents multiple concurrent loops per target.
+const automationRAF = {};
+
 function processAutomation(target, keyframes) {
   if (keyframes.length < 2) {
     // Single keyframe: set immediately
@@ -1952,10 +1955,15 @@ function processAutomation(target, keyframes) {
     return;
   }
 
+  // Cancel any existing RAF loop for this target
+  if (automationRAF[target]) {
+    cancelAnimationFrame(automationRAF[target]);
+    delete automationRAF[target];
+  }
+
   // Sort keyframes by time
   const sorted = keyframes.slice().sort((a, b) => a.time - b.time);
   const startTime = performance.now();
-  const totalDuration = (sorted[sorted.length - 1].time - sorted[0].time) * 1000;
 
   function applyEasing(t, easing) {
     switch (easing) {
@@ -1971,8 +1979,9 @@ function processAutomation(target, keyframes) {
     const absTime = sorted[0].time + elapsed;
 
     if (absTime >= sorted[sorted.length - 1].time) {
-      // Reached end — set final value
+      // Reached end — set final value and clear guard
       setParam(target, sorted[sorted.length - 1].value);
+      delete automationRAF[target];
       return;
     }
 
@@ -1993,12 +2002,12 @@ function processAutomation(target, keyframes) {
     const value = kfA.value + (kfB.value - kfA.value) * eased;
 
     setParam(target, value);
-    requestAnimationFrame(tick);
+    automationRAF[target] = requestAnimationFrame(tick);
   }
 
   // Set initial value and start
   setParam(target, sorted[0].value);
-  requestAnimationFrame(tick);
+  automationRAF[target] = requestAnimationFrame(tick);
 }
 
 

@@ -116,42 +116,70 @@ function compileShader(fragSrc) {
   if (program) gl.deleteProgram(program);
   program = p;
   currentFrag = fragSrc;
+  uniformCache = cacheUniforms(p);
   return p;
+}
+
+// --- Uniform cache ---
+// Uniform locations are cached per-program at compile time to avoid
+// calling gl.getUniformLocation() every frame (expensive GPU roundtrip).
+let uniformCache = null;
+
+function cacheUniforms(p) {
+  const u = {};
+  const names = [
+    'u_time', 'u_resolution', 'u_bpm', 'u_beat',
+    'u_bass', 'u_mid', 'u_high', 'u_energy', 'u_peak',
+    'u_color1', 'u_color2', 'u_color3', 'u_bg',
+    'u_param1', 'u_param2', 'u_param3', 'u_param4',
+    'u_intensity', 'u_speed', 'u_prevFrame',
+  ];
+  for (const name of names) {
+    u[name] = gl.getUniformLocation(p, name);
+  }
+  // Arrays
+  u.u_spectrum = gl.getUniformLocation(p, 'u_spectrum');
+  u.u_ext = gl.getUniformLocation(p, 'u_ext');
+  u.u_ext_xy = [];
+  for (let i = 0; i < 4; i++) {
+    u.u_ext_xy[i] = gl.getUniformLocation(p, `u_ext_xy[${i}]`);
+  }
+  return u;
 }
 
 // --- Uniform upload ---
 function uploadUniforms() {
-  if (!program) return;
+  if (!program || !uniformCache) return;
   gl.useProgram(program);
-  const u = (n) => gl.getUniformLocation(program, n);
+  const u = uniformCache;
 
-  gl.uniform1f(u('u_time'), uTime);
-  gl.uniform2f(u('u_resolution'), canvas.width, canvas.height);
-  gl.uniform1f(u('u_bpm'), bpm);
-  gl.uniform1f(u('u_beat'), uBeat);
+  gl.uniform1f(u.u_time, uTime);
+  gl.uniform2f(u.u_resolution, canvas.width, canvas.height);
+  gl.uniform1f(u.u_bpm, bpm);
+  gl.uniform1f(u.u_beat, uBeat);
 
-  gl.uniform1f(u('u_bass'), audio.bass);
-  gl.uniform1f(u('u_mid'), audio.mid);
-  gl.uniform1f(u('u_high'), audio.high);
-  gl.uniform1f(u('u_energy'), audio.energy);
-  gl.uniform1f(u('u_peak'), audio.peak);
-  gl.uniform1fv(u('u_spectrum'), audio.spectrum);
+  gl.uniform1f(u.u_bass, audio.bass);
+  gl.uniform1f(u.u_mid, audio.mid);
+  gl.uniform1f(u.u_high, audio.high);
+  gl.uniform1f(u.u_energy, audio.energy);
+  gl.uniform1f(u.u_peak, audio.peak);
+  gl.uniform1fv(u.u_spectrum, audio.spectrum);
 
-  gl.uniform3fv(u('u_color1'), palette.color1);
-  gl.uniform3fv(u('u_color2'), palette.color2);
-  gl.uniform3fv(u('u_color3'), palette.color3);
-  gl.uniform3fv(u('u_bg'), palette.bg);
+  gl.uniform3fv(u.u_color1, palette.color1);
+  gl.uniform3fv(u.u_color2, palette.color2);
+  gl.uniform3fv(u.u_color3, palette.color3);
+  gl.uniform3fv(u.u_bg, palette.bg);
 
-  gl.uniform1f(u('u_param1'), params[0]);
-  gl.uniform1f(u('u_param2'), params[1]);
-  gl.uniform1f(u('u_param3'), params[2]);
-  gl.uniform1f(u('u_param4'), params[3]);
-  gl.uniform1f(u('u_intensity'), intensity);
-  gl.uniform1f(u('u_speed'), speed);
-  gl.uniform1fv(u('u_ext'), ext);
+  gl.uniform1f(u.u_param1, params[0]);
+  gl.uniform1f(u.u_param2, params[1]);
+  gl.uniform1f(u.u_param3, params[2]);
+  gl.uniform1f(u.u_param4, params[3]);
+  gl.uniform1f(u.u_intensity, intensity);
+  gl.uniform1f(u.u_speed, speed);
+  gl.uniform1fv(u.u_ext, ext);
 
   for (let i = 0; i < 4; i++) {
-    gl.uniform2f(u(`u_ext_xy[${i}]`), extXY[i].x, extXY[i].y);
+    gl.uniform2f(u.u_ext_xy[i], extXY[i].x, extXY[i].y);
   }
 
   // Previous frame (Tier A)
@@ -159,7 +187,7 @@ function uploadUniforms() {
     const prevIdx = 1 - fboIdx;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, fbos[prevIdx].tex);
-    gl.uniform1i(u('u_prevFrame'), 0);
+    gl.uniform1i(u.u_prevFrame, 0);
   }
 }
 
