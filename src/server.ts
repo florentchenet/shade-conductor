@@ -567,7 +567,9 @@ const isMain = process.argv[1] &&
   fileURLToPath(import.meta.url).endsWith(process.argv[1].replace(/\.js$/, '.ts'));
 
 if (isMain || process.argv[1] === fileURLToPath(import.meta.url)) {
-  startServer().catch((err) => {
+  const httpPort = parseInt(process.env.HTTP_PORT || '3333', 10);
+  const wsPort = parseInt(process.env.WS_PORT || '3334', 10);
+  startServer(httpPort, wsPort).catch((err) => {
     console.error('[shade-conductor] failed to start:', err);
     process.exit(1);
   });
