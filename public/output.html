@@ -19,7 +19,7 @@ canvas{display:block;width:100vw;height:100vh}
  * Connects to the same WebSocket as the main UI but renders
  * without any HUD, editor, or controls — pure visuals only.
  */
-const WS_PORT = 3334;
+let WS_PORT = 3334;
 const canvas = document.getElementById('c');
 let gl, program, startTime, animFrame;
 let tier = 'B'; // default WebGL1
@@ -316,7 +316,7 @@ if (initGL()) {
     ? '#version 300 es\nprecision mediump float;out vec4 o;uniform float u_time;void main(){float t=u_time;o=vec4(vec3(0.01+0.005*sin(t)),1);}'
     : 'precision mediump float;uniform float u_time;void main(){float t=u_time;gl_FragColor=vec4(vec3(0.01+0.005*sin(t)),1);}');
   render(startTime);
-  connectWS();
+  fetch('/api/config').then(function(r){return r.json();}).then(function(c){if(c.wsPort)WS_PORT=c.wsPort;}).catch(function(){}).finally(function(){connectWS();});
 }
 </script>
 </body>

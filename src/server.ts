@@ -74,6 +74,7 @@ const clients = new Set<WebSocket>();
 
 let wss: WebSocketServer | null = null;
 let httpServer: Server | null = null;
+let activeWsPort = 3334;
 
 // ---------------------------------------------------------------------------
 // Broadcast
@@ -485,6 +486,12 @@ function createApp(): express.Application {
     res.json({ ok: true, id });
   });
 
+  // --- REST API: Config (exposes WS port to clients) ---
+
+  app.get('/api/config', (_req, res) => {
+    res.json({ wsPort: activeWsPort });
+  });
+
   // --- REST API: Server state ---
 
   app.get('/api/state', (_req, res) => {
@@ -506,6 +513,7 @@ function createApp(): express.Application {
  * Start the HTTP and WebSocket servers.
  */
 export async function startServer(port = 3333, wsPort = 3334): Promise<void> {
+  activeWsPort = wsPort;
   const app = createApp();
   httpServer = createServer(app);
 

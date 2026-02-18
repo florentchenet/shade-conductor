@@ -308,7 +308,7 @@ html, body {
 'use strict';
 
 // ── Constants ──
-const WS_URL = `ws://${window.location.hostname || 'localhost'}:3334`;
+let WS_URL = `ws://${window.location.hostname || 'localhost'}:3334`;
 const WS_RECONNECT_MS = 2000;
 const AUDIO_SEND_INTERVAL = 500;
 const FPS_SAMPLE_COUNT = 60;
@@ -2377,8 +2377,10 @@ async function init() {
   initDragDrop();
   startAudioReporting();
 
-  // Connect WebSocket
-  connectWS();
+  // Fetch WS port from server config, then connect
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(cfg) {
+    if (cfg.wsPort) WS_URL = 'ws://' + (window.location.hostname || 'localhost') + ':' + cfg.wsPort;
+  }).catch(function() {}).finally(function() { connectWS(); });
 
   // Start render loop
   state.startTime = 0;

@@ -14,7 +14,20 @@ WebGL visual engine for live stream visuals. Deployed at stream.rhncrs.com as a 
 - `scp -r public/* root@100.111.230.6:/srv/stream/`
 - No build step — raw HTML/JS
 
+## Environment
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `HTTP_PORT` | 3333 | Express HTTP server |
+| `WS_PORT` | 3334 | WebSocket server |
+| `OSC_PORT` | 9000 | OSC UDP bridge |
+
 ## Key Files
-- `public/index.html` — entire app (single file, ~2000 lines)
-- Shader/setlist/scene management via WebSocket commands
-- hexToRgb handles both 3-char and 6-char hex (fixed RHN-366)
+- `public/index.html` — main runtime (~2400 lines, WebGL + WS + audio + HUD)
+- `public/output.html` — clean output for projection/capture (no HUD)
+- `public/library.html` — shader preset browser
+- `src/index.ts` — MCP server entry (tools + resources + startup)
+- `src/server.ts` — Express + WebSocket server + REST API
+- `src/types.ts` — shared TypeScript types + GLSL uniform declarations
+- `src/store/preset-store.ts` — file-based preset/setlist storage
+- `src/tools/` — MCP tool registrations (shader, perform, audio, setlist, input, layer, scene, capture)
+- `src/osc/osc-bridge.ts` — OSC→WebSocket bridge

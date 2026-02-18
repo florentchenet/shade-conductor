@@ -130,16 +130,21 @@ async function main(): Promise<void> {
   // console.error stays on stderr already
 
   try {
+    // Read ports from environment (single source of truth)
+    const httpPort = parseInt(process.env.HTTP_PORT || '3333', 10);
+    const wsPort = parseInt(process.env.WS_PORT || '3334', 10);
+    const oscPort = parseInt(process.env.OSC_PORT || '9000', 10);
+
     // Start the Express + WebSocket server (non-fatal — MCP works without it)
     try {
-      await startServer(3333, 3334);
+      await startServer(httpPort, wsPort);
     } catch (err) {
       console.error('[http] failed to start Express/WS server:', err);
     }
 
     // Start the OSC bridge
     try {
-      startOscBridge(broadcastToClients, 9000);
+      startOscBridge(broadcastToClients, oscPort);
     } catch (err) {
       console.error('[osc] failed to start OSC bridge:', err);
     }
