@@ -149,11 +149,20 @@ function renderGrid() {
   });
 }
 
-function pushShader(id) {
-  // Send to main runtime via WebSocket relay
-  fetch(`${API_BASE}/api/state`).then(r => r.json()).then(state => {
-    setStatus(`pushed: ${id}`);
-  }).catch(() => setStatus('push failed'));
+async function pushShader(id) {
+  try {
+    const res = await fetch(`${API_BASE}/api/presets/${encodeURIComponent(id)}`);
+    if (!res.ok) { setStatus(`preset not found: ${id}`); return; }
+    const preset = await res.json();
+    // Push shader code to runtime via the server broadcast
+    const pushRes = await fetch(`${API_BASE}/api/push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: preset.name, code: preset.code }),
+    });
+    if (pushRes.ok) setStatus(`pushed: ${preset.name}`);
+    else setStatus('push failed');
+  } catch { setStatus('push failed'); }
 }
 
 function setStatus(msg) {

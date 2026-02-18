@@ -14,6 +14,7 @@ import type {
   PaletteConfig,
 } from './types.js';
 import { handleValidationResult } from './tools/shader-tools.js';
+import { listPresets, getPreset } from './store/preset-store.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -325,12 +326,17 @@ function handleClientMessage(_ws: WebSocket, msg: WSMessageFromClient): void {
       handleValidationResult(msg.id, msg.success, msg.error);
       break;
 
+    case 'chapter_jump':
+      console.log(`[setlist] chapter jump requested: ${msg.chapter}`);
+      break;
+
+    case 'screenshot_taken':
+      console.log(`[capture] screenshot taken at ${new Date(msg.timestamp).toISOString()}`);
+      break;
+
     case 'ready':
       console.log('[ws] client reports ready');
       break;
-
-    default:
-      console.warn('[ws] unhandled message type:', (msg as { type: string }).type);
   }
 }
 
@@ -451,6 +457,32 @@ function createApp(): express.Application {
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
+  });
+
+  // --- REST API: Presets ---
+
+  app.get('/api/presets', async (req, res) => {
+    const tag = typeof req.query.tag === 'string' ? req.query.tag : undefined;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const presets = await listPresets({ tag, search });
+    res.json(presets);
+  });
+
+  app.get('/api/presets/:name', async (req, res) => {
+    const preset = await getPreset(req.params.name);
+    if (!preset) { res.status(404).json({ error: 'Preset not found' }); return; }
+    res.json(preset);
+  });
+
+  // --- REST API: Push shader to runtime ---
+
+  app.post('/api/push', (req, res) => {
+    const { id, code } = req.body as { id?: string; code?: string };
+    if (!id || !code) { res.status(400).json({ error: 'id and code required' }); return; }
+    currentShaderId = id;
+    currentShaderCode = code;
+    broadcastToClients({ type: 'shader_push', code, id });
+    res.json({ ok: true, id });
   });
 
   // --- REST API: Server state ---

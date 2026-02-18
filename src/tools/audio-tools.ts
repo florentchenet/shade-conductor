@@ -36,8 +36,10 @@ export function registerAudioTools(server: McpServer): void {
     'audio_bind',
     'Create a mapping from an audio analysis source to a shader parameter target. The browser will continuously update the target based on audio input.',
     {
-      source: z.enum(['bass', 'mid', 'high', 'energy', 'peak', 'spectrum'])
-        .describe('Audio analysis band to use as source'),
+      source: z.string().refine(
+        (s) => ['bass', 'mid', 'high', 'energy', 'peak'].includes(s) || /^spectrum_\d{1,2}$/.test(s),
+        { message: 'Must be bass, mid, high, energy, peak, or spectrum_0 through spectrum_15' }
+      ).describe('Audio source: bass, mid, high, energy, peak, or spectrum_0..spectrum_15'),
       target: z.string()
         .describe('Shader uniform target, e.g. "u_param1", "u_intensity", "u_ext[0]"'),
       multiplier: z.number().default(1).describe('Scale factor applied to the source value'),
@@ -46,7 +48,7 @@ export function registerAudioTools(server: McpServer): void {
     },
     async (args) => {
       const binding: AudioBinding = {
-        source: args.source,
+        source: args.source as AudioBinding['source'],
         target: args.target,
         multiplier: args.multiplier,
         offset: args.offset,

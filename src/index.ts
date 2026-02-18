@@ -130,15 +130,18 @@ async function main(): Promise<void> {
   // console.error stays on stderr already
 
   try {
-    // Start the Express + WebSocket server
-    await startServer(3333, 3334);
+    // Start the Express + WebSocket server (non-fatal — MCP works without it)
+    try {
+      await startServer(3333, 3334);
+    } catch (err) {
+      console.error('[http] failed to start Express/WS server:', err);
+    }
 
     // Start the OSC bridge
     try {
       startOscBridge(broadcastToClients, 9000);
     } catch (err) {
       console.error('[osc] failed to start OSC bridge:', err);
-      // Non-fatal — MCP still works without OSC
     }
 
     // Connect MCP server to stdio transport

@@ -6,20 +6,12 @@ export interface ShaderPreset {
   description: string;
   code: string;
   code_webgl2?: string;
-  passes?: MultiPassShader;
   tags: string[];
   params: ParamNames;
   palette?: PaletteConfig;
   audio_bindings?: AudioBinding[];
   created: string;
   modified: string;
-}
-
-export interface MultiPassShader {
-  bufferA?: string;
-  bufferB?: string;
-  bufferC?: string;
-  main: string;
 }
 
 export interface ParamNames {
@@ -37,7 +29,7 @@ export interface PaletteConfig {
 }
 
 export interface AudioBinding {
-  source: 'bass' | 'mid' | 'high' | 'energy' | 'peak' | 'spectrum';
+  source: 'bass' | 'mid' | 'high' | 'energy' | 'peak' | `spectrum_${number}`;
   target: string;
   multiplier: number;
   offset: number;
@@ -119,9 +111,11 @@ export type WSMessageToClient =
 export type WSMessageFromClient =
   | { type: 'state'; data: RuntimeState }
   | { type: 'shader_error'; error: string; shaderId: string }
-  | { type: 'audio_levels'; bass: number; mid: number; high: number; energy: number; peak: number }
+  | { type: 'audio_levels'; bass: number; mid: number; high: number; energy: number; peak: number; spectrum?: number[] }
   | { type: 'capture_complete'; filename: string; size: number }
   | { type: 'shader_validated'; id: string; success: boolean; error?: string }
+  | { type: 'chapter_jump'; chapter: number }
+  | { type: 'screenshot_taken'; timestamp: number }
   | { type: 'ready' };
 
 export interface RuntimeState {
@@ -227,9 +221,6 @@ uniform float u_bar;
 
 // Textures
 uniform sampler2D u_prevFrame;
-uniform sampler2D u_bufferA;
-uniform sampler2D u_bufferB;
-uniform sampler2D u_bufferC;
 uniform sampler2D u_noise;
 
 out vec4 fragColor;

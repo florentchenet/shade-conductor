@@ -172,7 +172,10 @@ const automationSchema = z.object({
 });
 
 const audioBindingSchema = z.object({
-  source: z.enum(['bass', 'mid', 'high', 'energy', 'peak', 'spectrum']),
+  source: z.string().refine(
+    (s) => ['bass', 'mid', 'high', 'energy', 'peak'].includes(s) || /^spectrum_\d{1,2}$/.test(s),
+    { message: 'Must be bass, mid, high, energy, peak, or spectrum_0 through spectrum_15' }
+  ),
   target: z.string(),
   multiplier: z.number().default(1),
   offset: z.number().default(0),
