@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SHADE</title>
+<title>RHINOCEROS</title>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -91,6 +91,7 @@ html, body {
 #audio-source-badge.silent   { background: rgba(80,80,80,0.5); color: rgba(255,255,255,0.4); }
 #audio-source-badge.mic      { background: rgba(255,60,60,0.3); color: rgba(255,120,120,0.9); }
 #audio-source-badge.file     { background: rgba(60,120,255,0.3); color: rgba(100,160,255,0.9); }
+#audio-source-badge.radio    { background: rgba(100,255,100,0.2); color: rgba(120,255,120,0.9); }
 
 #ws-status {
   margin-top: 6px;
@@ -252,6 +253,132 @@ html, body {
 }
 
 #drop-zone.active { display: flex; }
+
+/* ── Now Playing / Radio Overlay ── */
+#now-playing {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 11;
+  pointer-events: none;
+  transition: opacity 1.5s ease;
+  opacity: 0;
+}
+
+#now-playing.visible { opacity: 1; }
+
+#now-playing .track-name {
+  color: rgba(255,255,255,0.75);
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(0,0,0,0.9);
+  margin-bottom: 4px;
+}
+
+#now-playing .artist {
+  color: rgba(255,255,255,0.35);
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+#now-playing .track-progress {
+  margin-top: 8px;
+  width: 200px;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 1px;
+}
+
+#now-playing .track-fill {
+  height: 100%;
+  background: rgba(255,255,255,0.25);
+  border-radius: 1px;
+  width: 0%;
+  transition: width 1s linear;
+}
+
+/* ── Click to Start (audio autoplay policy) ── */
+#start-screen {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.5s ease;
+}
+
+#start-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#start-screen .brand {
+  color: rgba(255,255,255,0.6);
+  font-size: 14px;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+}
+
+#start-screen .prompt {
+  color: rgba(255,255,255,0.25);
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  animation: start-pulse 2s ease infinite;
+}
+
+@keyframes start-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.6; }
+}
+
+/* ── Volume Control ── */
+#volume-control {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#volume-control.visible { opacity: 1; }
+
+#volume-control input[type="range"] {
+  width: 80px;
+  height: 2px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255,255,255,0.15);
+  outline: none;
+  cursor: pointer;
+}
+
+#volume-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+}
+
+#volume-control .vol-label {
+  color: rgba(255,255,255,0.3);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
 </style>
 </head>
 <body>
@@ -260,7 +387,7 @@ html, body {
 
 <div id="hud">
   <div id="hud-top">
-    <div><span class="label">SHADE </span><span id="tier-badge" class="value">--</span></div>
+    <div><span class="label">RHINOCEROS </span><span id="tier-badge" class="value">--</span></div>
     <div><span class="label">SHADER </span><span id="shader-name" class="value">default</span></div>
     <div><span class="label">FPS </span><span id="fps-display" class="value">--</span></div>
     <div><span class="label">RES </span><span id="res-display" class="value">--</span></div>
@@ -298,6 +425,22 @@ html, body {
 
 <div id="drop-zone">DROP AUDIO FILE</div>
 
+<div id="now-playing">
+  <div class="track-name" id="np-track">—</div>
+  <div class="artist">RHINOCEROS</div>
+  <div class="track-progress"><div class="track-fill" id="np-fill"></div></div>
+</div>
+
+<div id="volume-control">
+  <span class="vol-label">VOL</span>
+  <input type="range" id="vol-slider" min="0" max="1" step="0.01" value="0.8" />
+</div>
+
+<div id="start-screen">
+  <div class="brand">RHINOCEROS</div>
+  <div class="prompt">click anywhere to listen</div>
+</div>
+
 <script>
 // ============================================================================
 // SHADE CONDUCTOR — Browser Runtime
@@ -309,6 +452,7 @@ html, body {
 
 // ── Constants ──
 let WS_URL = `ws://${window.location.hostname || 'localhost'}:3334`;
+const STUDIO_API = 'https://studio.rhncrs.com';
 const WS_RECONNECT_MS = 2000;
 const AUDIO_SEND_INTERVAL = 500;
 const FPS_SAMPLE_COUNT = 60;
@@ -493,6 +637,18 @@ const state = {
   flashStart: 0,
   flashDuration: 0,
   flashColor: [1, 1, 1],
+
+  // Radio mode
+  radioActive: false,
+  radioTracks: [],       // [{name, displayName, stems}]
+  radioPresets: [],       // full preset objects from studio
+  radioTrackIndex: -1,
+  radioCurrentTrack: null,
+  radioStemElements: [],  // Audio elements for current stems
+  radioStemSources: [],   // MediaElementSource nodes
+  radioMixer: null,       // GainNode mixing all stems
+  radioVolume: 0.8,
+  radioStarted: false,    // user has clicked to start
 };
 
 
@@ -1526,9 +1682,11 @@ function stopAudio() {
 
 function updateAudioBadge() {
   const badge = document.getElementById('audio-source-badge');
-  badge.className = state.audioMode;
+  const isRadio = state.radioStarted && state.audioMode === 'file';
+  badge.className = isRadio ? 'radio' : state.audioMode;
   badge.textContent = state.audioMode === 'silent' ? 'SILENT'
                     : state.audioMode === 'mic' ? 'MIC LIVE'
+                    : isRadio ? 'RADIO'
                     : 'AUDIO FILE';
 }
 
@@ -1650,6 +1808,373 @@ function processAudioBindings() {
       case 'speed': u.speed = u.speed * smooth + mapped * (1 - smooth); break;
     }
   }
+}
+
+
+// ============================================================================
+// RADIO MODE — Autonomous audio playback from studio stems
+// ============================================================================
+
+const STEM_NAMES = ['drums', 'bass', 'vocals', 'other'];
+
+async function initRadio() {
+  console.log('[SHADE] Initializing radio mode...');
+
+  try {
+    // Fetch tracks and presets from studio
+    const [tracksRes, presetsRes] = await Promise.all([
+      fetch(STUDIO_API + '/api/public/tracks'),
+      fetch(STUDIO_API + '/api/public/presets'),
+    ]);
+
+    if (!tracksRes.ok || !presetsRes.ok) {
+      console.warn('[SHADE] Failed to fetch radio data from studio');
+      return;
+    }
+
+    const tracksData = await tracksRes.json();
+    const presetsData = await presetsRes.json();
+
+    state.radioTracks = tracksData.tracks || [];
+    state.radioPresets = presetsData.presets || [];
+
+    if (state.radioTracks.length === 0) {
+      console.warn('[SHADE] No tracks available for radio');
+      return;
+    }
+
+    // Shuffle tracks
+    shuffleArray(state.radioTracks);
+
+    state.radioActive = true;
+    console.log('[SHADE] Radio ready:', state.radioTracks.length, 'tracks,', state.radioPresets.length, 'presets');
+
+    // Show start screen
+    document.getElementById('start-screen').style.display = 'flex';
+  } catch (err) {
+    console.error('[SHADE] Radio init error:', err);
+  }
+}
+
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+
+async function startRadio() {
+  if (!state.radioActive || state.radioStarted) return;
+  state.radioStarted = true;
+
+  // Hide start screen
+  const screen = document.getElementById('start-screen');
+  screen.classList.add('hidden');
+  setTimeout(function() { screen.style.display = 'none'; }, 500);
+
+  // Check if studio has an auto-DJ state
+  try {
+    const liveRes = await fetch(STUDIO_API + '/api/public/live');
+    if (liveRes.ok) {
+      const liveData = await liveRes.json();
+      if (liveData.autodj && liveData.autodj.enabled && liveData.state && liveData.state.track) {
+        // Studio auto-DJ is active — sync with it
+        const trackIdx = state.radioTracks.findIndex(function(t) { return t.name === liveData.state.track; });
+        if (trackIdx >= 0) {
+          state.radioTrackIndex = trackIdx - 1; // will be incremented in advanceRadio
+        }
+      }
+    }
+  } catch (e) {
+    // Continue with local shuffle
+  }
+
+  advanceRadio();
+}
+
+
+async function advanceRadio() {
+  if (!state.radioActive) return;
+
+  // Next track
+  state.radioTrackIndex++;
+  if (state.radioTrackIndex >= state.radioTracks.length) {
+    // Reshuffle and restart
+    shuffleArray(state.radioTracks);
+    state.radioTrackIndex = 0;
+  }
+
+  const track = state.radioTracks[state.radioTrackIndex];
+  state.radioCurrentTrack = track;
+
+  // Pick a random preset and push its shader
+  if (state.radioPresets.length > 0) {
+    const preset = state.radioPresets[Math.floor(Math.random() * state.radioPresets.length)];
+    pushPresetShader(preset);
+  }
+
+  // Load and play stems
+  await loadRadioTrack(track);
+
+  // Notify studio that we advanced (if auto-DJ enabled)
+  try {
+    fetch(STUDIO_API + '/api/public/autodj/advance', { method: 'POST' }).catch(function() {});
+  } catch (e) {
+    // Non-critical
+  }
+}
+
+
+function pushPresetShader(preset) {
+  if (!preset || !preset.code) return;
+
+  // Convert stream-studio preset code to shade-conductor shader format
+  // stream-studio presets use different engines — only hydra/shader/glitch have GLSL
+  // For cosmic/p5/hydra/quantum, we use a default shader with the preset colors
+  const colors = preset.baseColors || [];
+
+  // Set palette from preset colors
+  if (colors.length >= 1) {
+    const palette = {};
+    if (colors[0]) palette.color1 = hexToGL(colors[0]);
+    if (colors[1]) palette.color2 = hexToGL(colors[1]);
+    if (colors[2]) palette.color3 = hexToGL(colors[2]);
+    if (colors[3]) palette.bg = hexToGL(colors[3]);
+    setPalette(palette);
+  }
+
+  // For shader engine presets, push the actual GLSL code
+  if (preset.engine === 'shader' && preset.code) {
+    pushShader(preset.code, preset.id || 'radio', 2.0); // 2s crossfade
+    return;
+  }
+
+  // For other engines, use a generated reactive shader with the preset's palette
+  const reactiveShader = generateReactiveShader(preset);
+  pushShader(reactiveShader, preset.id || 'radio', 2.0);
+}
+
+
+function hexToGL(hex) {
+  if (!hex || hex.length < 7) return [0.5, 0.5, 0.5];
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b];
+}
+
+
+function generateReactiveShader(preset) {
+  // Generate a visually interesting shader that responds to audio
+  // Uses a random pick from several template patterns
+  const patterns = [
+    // Ripple rings
+    `void main() {
+  vec2 uv = (gl_FragCoord.xy - u_resolution * 0.5) / min(u_resolution.x, u_resolution.y);
+  float d = length(uv);
+  float t = u_time * u_speed * 0.3;
+  float rings = sin(d * 12.0 - t * 3.0 + u_bass * 8.0) * exp(-d * 2.0);
+  rings += sin(d * 8.0 + t * 2.0 - u_mid * 6.0) * exp(-d * 1.5) * 0.5;
+  float v = rings * 0.5 + 0.5;
+  vec3 col = mix(u_bg, u_color1, v * (0.6 + u_energy * 0.4));
+  col += u_color2 * pow(max(0.0, rings), 3.0) * 0.4;
+  col *= 1.0 - d * 0.5;
+  col *= 0.7 + u_energy * 0.3;
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+    // Kaleidoscope
+    `void main() {
+  vec2 uv = (gl_FragCoord.xy - u_resolution * 0.5) / min(u_resolution.x, u_resolution.y);
+  float a = atan(uv.y, uv.x);
+  float d = length(uv);
+  float t = u_time * u_speed * 0.2;
+  float seg = floor(6.0 + u_mid * 4.0);
+  a = mod(a + 3.14159, 6.28318 / seg) - 3.14159 / seg;
+  vec2 p = vec2(cos(a), sin(a)) * d;
+  float v = sin(p.x * 10.0 + t) * cos(p.y * 10.0 - t * 0.7);
+  v += sin(d * 8.0 - t * 2.0 + u_bass * 4.0) * 0.5;
+  v = v * 0.5 + 0.5;
+  vec3 col = mix(u_color1, u_color2, v);
+  col = mix(col, u_color3, pow(d, 2.0) * 0.5);
+  col += u_bg * (1.0 - d);
+  col *= 0.6 + u_energy * 0.4;
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+    // Waveform landscape
+    `void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  float t = u_time * u_speed * 0.15;
+  float wave = 0.0;
+  for (float i = 1.0; i < 6.0; i++) {
+    wave += sin(uv.x * i * 5.0 + t * i * 0.7 + u_bass * i) / i;
+    wave += cos(uv.x * i * 3.0 - t * i * 0.5 + u_mid * i * 0.5) / (i * 1.5);
+  }
+  wave = wave * 0.15 + 0.5;
+  float line = smoothstep(0.02, 0.0, abs(uv.y - wave));
+  float glow = exp(-abs(uv.y - wave) * 8.0) * (0.3 + u_energy * 0.7);
+  vec3 col = u_bg;
+  col += u_color1 * glow;
+  col += u_color2 * line;
+  col += u_color3 * exp(-abs(uv.y - wave) * 3.0) * u_high * 0.5;
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+    // Particle field
+    `void main() {
+  vec2 uv = (gl_FragCoord.xy - u_resolution * 0.5) / min(u_resolution.x, u_resolution.y);
+  float t = u_time * u_speed * 0.1;
+  float v = 0.0;
+  for (float i = 0.0; i < 8.0; i++) {
+    vec2 p = vec2(sin(t + i * 1.7) * 0.5, cos(t * 0.8 + i * 2.1) * 0.4);
+    p += vec2(sin(i * 3.0 + u_bass * 2.0), cos(i * 2.5 + u_mid * 2.0)) * 0.2;
+    float d = length(uv - p);
+    v += (0.01 + u_energy * 0.02) / (d + 0.01);
+  }
+  v = clamp(v, 0.0, 1.0);
+  vec3 col = mix(u_bg, u_color1, v * 0.5);
+  col += u_color2 * pow(v, 3.0) * 0.8;
+  col += u_color3 * pow(v, 5.0) * 0.4;
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+    // Tunnel
+    `void main() {
+  vec2 uv = (gl_FragCoord.xy - u_resolution * 0.5) / min(u_resolution.x, u_resolution.y);
+  float a = atan(uv.y, uv.x);
+  float d = length(uv);
+  float t = u_time * u_speed * 0.2;
+  float tunnel = 1.0 / (d + 0.1) + t;
+  float v = sin(tunnel * 3.0 + a * 3.0) * sin(tunnel * 2.0 - a * 2.0 + u_bass * 3.0);
+  v = v * 0.5 + 0.5;
+  v *= exp(-d * 0.5);
+  vec3 col = mix(u_bg, u_color1, v * 0.7);
+  col += u_color2 * pow(v, 2.0) * (0.3 + u_mid * 0.7);
+  col *= 0.7 + u_energy * 0.3;
+  col += u_color3 * exp(-d * 3.0) * u_high * 0.3;
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+  ];
+
+  return patterns[Math.floor(Math.random() * patterns.length)];
+}
+
+
+async function loadRadioTrack(track) {
+  console.log('[SHADE] Loading track:', track.name);
+
+  // Stop previous stems
+  stopRadioStems();
+
+  // Initialize audio context
+  initAudioContext();
+  if (state.audioCtx.state === 'suspended') {
+    await state.audioCtx.resume();
+  }
+
+  // Create mixer gain node (once)
+  if (!state.radioMixer) {
+    state.radioMixer = state.audioCtx.createGain();
+    state.radioMixer.gain.value = state.radioVolume;
+    state.radioMixer.connect(state.analyser);
+    state.analyser.connect(state.audioCtx.destination);
+  }
+
+  // Load all 4 stems as Audio elements
+  const stemElements = [];
+  const stemSources = [];
+  let longestElement = null;
+
+  for (const stem of STEM_NAMES) {
+    const audio = new Audio();
+    audio.crossOrigin = 'anonymous';
+    audio.preload = 'auto';
+    audio.src = STUDIO_API + '/api/public/stems/' + encodeURIComponent(track.name) + '/' + stem;
+
+    const source = state.audioCtx.createMediaElementSource(audio);
+    source.connect(state.radioMixer);
+
+    stemElements.push(audio);
+    stemSources.push(source);
+  }
+
+  state.radioStemElements = stemElements;
+  state.radioStemSources = stemSources;
+
+  // Wait for all stems to be loadable
+  await Promise.all(stemElements.map(function(audio) {
+    return new Promise(function(resolve) {
+      audio.addEventListener('canplay', resolve, { once: true });
+      audio.addEventListener('error', resolve, { once: true }); // don't block on errors
+      audio.load();
+    });
+  }));
+
+  // Play all simultaneously
+  const playPromises = stemElements.map(function(audio) {
+    return audio.play().catch(function(err) {
+      console.warn('[SHADE] Stem play error:', err);
+    });
+  });
+  await Promise.all(playPromises);
+
+  // Set audio state
+  state.audioMode = 'file';
+  state.audioActive = true;
+  state.audioFadeCounter = 0;
+  updateAudioBadge();
+
+  // Update now-playing UI
+  updateNowPlaying(track);
+
+  // Listen for track end (use first stem as reference)
+  stemElements[0].addEventListener('ended', function() {
+    console.log('[SHADE] Track ended:', track.name);
+    advanceRadio();
+  }, { once: true });
+
+  // Start progress updater
+  startProgressUpdater();
+
+  console.log('[SHADE] Playing:', track.displayName || track.name);
+}
+
+
+function stopRadioStems() {
+  state.radioStemElements.forEach(function(audio) {
+    audio.pause();
+    audio.src = '';
+  });
+  state.radioStemSources.forEach(function(source) {
+    try { source.disconnect(); } catch (e) {}
+  });
+  state.radioStemElements = [];
+  state.radioStemSources = [];
+}
+
+
+function updateNowPlaying(track) {
+  const np = document.getElementById('now-playing');
+  const nameEl = document.getElementById('np-track');
+  nameEl.textContent = track.displayName || track.name.replace(/_/g, ' ');
+
+  // Fade in
+  np.classList.add('visible');
+
+  // Show volume control
+  document.getElementById('volume-control').classList.add('visible');
+}
+
+
+let progressTimer = null;
+
+function startProgressUpdater() {
+  if (progressTimer) clearInterval(progressTimer);
+  progressTimer = setInterval(function() {
+    const audio = state.radioStemElements[0];
+    if (!audio || !audio.duration) return;
+    const pct = (audio.currentTime / audio.duration) * 100;
+    document.getElementById('np-fill').style.width = pct + '%';
+  }, 1000);
 }
 
 
@@ -2389,6 +2914,22 @@ async function init() {
 
   // Editor compile button
   document.getElementById('btn-compile').addEventListener('click', compileFromEditor);
+
+  // Radio mode: fetch tracks and presets, show start screen
+  initRadio();
+
+  // Click-to-start handler (required for audio autoplay policy)
+  document.getElementById('start-screen').addEventListener('click', function() {
+    startRadio();
+  });
+
+  // Volume control
+  document.getElementById('vol-slider').addEventListener('input', function(e) {
+    state.radioVolume = parseFloat(e.target.value);
+    if (state.radioMixer) {
+      state.radioMixer.gain.value = state.radioVolume;
+    }
+  });
 
   console.log('[SHADE] Ready');
 }
