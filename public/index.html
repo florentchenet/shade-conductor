@@ -2086,9 +2086,8 @@ async function loadRadioTrack(track) {
 
   for (const stem of STEM_NAMES) {
     const audio = new Audio();
-    audio.crossOrigin = 'anonymous';
     audio.preload = 'auto';
-    audio.src = STUDIO_API + '/api/public/stems/' + encodeURIComponent(track.name) + '/' + stem;
+    audio.src = '/stems/' + encodeURIComponent(track.name) + '/' + stem + '.mp3';
 
     const source = state.audioCtx.createMediaElementSource(audio);
     source.connect(state.radioMixer);
