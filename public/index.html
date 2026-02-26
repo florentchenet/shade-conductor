@@ -596,6 +596,189 @@ void main() {
 }
 `;
 
+// ── Stream-studio shader presets (script index → GLSL body) ──
+// Ported from stream-studio lib/engines/shader.ts to shade-conductor uniform system
+// Mapping: uTime→u_time, uSpeed→u_speed, uMod→u_intensity, uScale→u_param1(default 1),
+//          uBrt→u_param2(default 1), uC0→u_color1, uC1→u_color2, gl_FragColor→SHADE_OUT
+const STUDIO_SHADERS = {
+  0: `// Plasma — pulsing organic color fields
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = (uv - 0.5) * 4.0 * max(u_param1, 1.0);
+  float t = u_time * u_speed * 0.5;
+  float v = sin(p.x * 2.0 + t);
+  v += sin(p.y * 2.0 + t * 0.7);
+  v += sin((p.x + p.y) * 1.5 + t * 1.3);
+  v += sin(length(p) * 3.0 - t * 0.8) * u_intensity;
+  v = v * 0.25 + 0.5;
+  vec3 col = mix(u_color1, u_color2, v) * max(u_param2, 1.0);
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+  2: `// Warp Fabric — spacetime distortion
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = (uv - 0.5) * 2.0;
+  float d = length(p);
+  float a = atan(p.y, p.x);
+  float warp = sin(d * 6.0 * max(u_param1, 1.0) - u_time * u_speed) * u_intensity * 0.3;
+  float pattern = sin(a * 4.0 + warp + u_time * 0.5) * 0.5 + 0.5;
+  vec3 col = mix(u_color1, u_color2, pattern) * max(u_param2, 1.0);
+  col += vec3(0.1) * (1.0 - d) * u_intensity * 0.2;
+  float alpha = smoothstep(1.2, 0.0, d);
+  SHADE_OUT = vec4(col, alpha);
+}`,
+  3: `// Frozen Glass — ice crystal formation
+float _hash3(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float _noise3(vec2 p) {
+  vec2 i = floor(p); vec2 f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(_hash3(i),_hash3(i+vec2(1,0)),f.x),mix(_hash3(i+vec2(0,1)),_hash3(i+vec2(1,1)),f.x),f.y);
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = uv * 5.0 * max(u_param1, 1.0);
+  float n = 0.0; float amp = 1.0;
+  for(int i=0;i<5;i++){
+    n += _noise3(p + u_time * u_speed * 0.1) * amp;
+    p *= 2.0; amp *= 0.5;
+  }
+  n = n * 0.5;
+  float crystal = smoothstep(0.3, 0.7, n) * u_intensity;
+  vec3 col = mix(u_color1, u_color2, crystal) * max(u_param2, 1.0);
+  SHADE_OUT = vec4(col, 0.8 + crystal * 0.2);
+}`,
+  4: `// Kaleidoscope — mirrored geometric patterns
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = (uv - 0.5) * 2.0 * max(u_param1, 1.0);
+  float a = atan(p.y, p.x);
+  float r = length(p);
+  float segments = 6.0 + u_intensity * 4.0;
+  a = mod(a, 6.28318 / segments);
+  a = abs(a - 3.14159 / segments);
+  vec2 q = vec2(cos(a), sin(a)) * r;
+  float t = u_time * u_speed * 0.5;
+  float pattern = sin(q.x * 8.0 + t) * sin(q.y * 8.0 - t * 0.7);
+  pattern += sin(r * 6.0 - t * 1.2) * 0.5;
+  pattern = pattern * 0.5 + 0.5;
+  vec3 col = mix(u_color1, u_color2, pattern) * max(u_param2, 1.0);
+  float alpha = smoothstep(1.0, 0.2, r);
+  SHADE_OUT = vec4(col, alpha);
+}`,
+  5: `// Neural Net — pulsing node connections
+float _hash5(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = uv * 4.0 * max(u_param1, 1.0);
+  vec2 id = floor(p);
+  vec2 f = fract(p) - 0.5;
+  float d = 1.0;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+    vec2 n = vec2(float(x),float(y));
+    vec2 off = vec2(_hash5(id+n), _hash5(id+n+42.0)) * 0.5;
+    off += sin(u_time * u_speed * 0.5 + off * 6.28) * 0.2 * u_intensity;
+    d = min(d, length(f - n - off));
+  }
+  float glow = exp(-d * 8.0) * max(u_param2, 1.0);
+  float pulse = sin(u_time * u_speed * 2.0 + d * 10.0) * 0.5 + 0.5;
+  vec3 col = mix(u_color1, u_color2, pulse) * glow * 2.0;
+  SHADE_OUT = vec4(col, glow);
+}`,
+  6: `// Neon Grid — cyberpunk wireframe
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = uv * 10.0 * max(u_param1, 1.0);
+  float t = u_time * u_speed * 0.3;
+  vec2 g = fract(p + vec2(t * 0.1, t * 0.05)) - 0.5;
+  float lineX = smoothstep(0.02, 0.0, abs(g.x));
+  float lineY = smoothstep(0.02, 0.0, abs(g.y));
+  float grid = max(lineX, lineY);
+  float pulse = sin(length(p - 5.0 * max(u_param1, 1.0)) * 0.5 - t * 2.0) * 0.5 + 0.5;
+  pulse *= u_intensity;
+  vec3 col = mix(u_color1 * 0.2, u_color2, grid * (0.5 + pulse * 0.5)) * max(u_param2, 1.0);
+  col += u_color2 * grid * pulse * 0.5;
+  SHADE_OUT = vec4(col, 0.9);
+}`,
+  7: `// Lava Flow — viscous magma with glowing cracks
+float _hash7(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float _noise7(vec2 p) {
+  vec2 i = floor(p); vec2 f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(_hash7(i),_hash7(i+vec2(1,0)),f.x),mix(_hash7(i+vec2(0,1)),_hash7(i+vec2(1,1)),f.x),f.y);
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = uv * 3.0 * max(u_param1, 1.0);
+  float n = 0.0; float amp = 1.0;
+  vec2 shift = vec2(u_time * u_speed * 0.1, u_time * u_speed * 0.05);
+  for(int i=0;i<6;i++){
+    n += _noise7(p + shift) * amp;
+    p *= 2.1 + u_intensity * 0.3; amp *= 0.5; shift *= 1.5;
+  }
+  float lava = smoothstep(0.4, 0.6, n);
+  float crack = smoothstep(0.48, 0.52, n) * 2.0;
+  vec3 col = mix(u_color1 * 0.3, u_color2, lava) * max(u_param2, 1.0) + vec3(crack * max(u_param2, 1.0));
+  SHADE_OUT = vec4(col, 0.9);
+}`,
+  9: `// Fractal — Mandelbrot-inspired zoom
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  float t = u_time * u_speed * 0.05;
+  float zoom = 2.0 + sin(t) * max(u_param1, 1.0);
+  vec2 c = (uv - 0.5) * zoom + vec2(-0.5 + sin(t * 0.3) * 0.2, sin(t * 0.2) * 0.2);
+  vec2 z = vec2(0.0);
+  float iter = 0.0;
+  for(int i = 0; i < 64; i++) {
+    z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+    if(dot(z,z) > 4.0) break;
+    iter += 1.0;
+  }
+  float f = iter / 64.0;
+  f = pow(f, 0.5 + u_intensity * 0.5);
+  vec3 col = mix(u_color1, u_color2, f) * max(u_param2, 1.0);
+  SHADE_OUT = vec4(col, 1.0);
+}`,
+  10: `// Acid Wash — corrosive neon patterns
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = (uv - 0.5) * 2.0 * max(u_param1, 1.0);
+  float t = u_time * u_speed * 0.5;
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float wave1 = sin(r * 8.0 - t * 2.0) * cos(a * 3.0 + t);
+  float wave2 = sin(r * 5.0 + a * 5.0 - t * 1.5) * u_intensity;
+  float pattern = (wave1 + wave2) * 0.5 + 0.5;
+  float levels = 4.0 + u_intensity * 8.0;
+  pattern = floor(pattern * levels) / levels;
+  vec3 col = mix(u_color1, u_color2, pattern) * max(u_param2, 1.0) * 1.5;
+  float alpha = smoothstep(1.2, 0.0, r) * 0.9;
+  SHADE_OUT = vec4(col, alpha);
+}`,
+  11: `// Clouds — volumetric fog and light
+float _hash11(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float _noise11(vec2 p) {
+  vec2 i = floor(p); vec2 f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(_hash11(i),_hash11(i+vec2(1,0)),f.x),mix(_hash11(i+vec2(0,1)),_hash11(i+vec2(1,1)),f.x),f.y);
+}
+float _fbm11(vec2 p) {
+  float v = 0.0; float a = 0.5;
+  for(int i = 0; i < 5; i++) { v += _noise11(p) * a; p *= 2.0; a *= 0.5; }
+  return v;
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = uv * 3.0 * max(u_param1, 1.0);
+  float t = u_time * u_speed * 0.1;
+  float n1 = _fbm11(p + vec2(t, t * 0.5));
+  float n2 = _fbm11(p + n1 * u_intensity + vec2(t * 0.3, -t * 0.2));
+  float cloud = smoothstep(0.3, 0.7, n2);
+  vec3 col = mix(u_color1, u_color2, cloud) * max(u_param2, 1.0);
+  col += vec3(0.1) * (1.0 - cloud) * max(u_param2, 1.0);
+  SHADE_OUT = vec4(col, 0.8 + cloud * 0.2);
+}`,
+};
+
 // ── Benchmark shader ──
 const BENCHMARK_SHADER_BODY = `
 void main() {
@@ -2037,10 +2220,29 @@ function pushPresetShader(preset) {
     setPalette(palette);
   }
 
-  // For shader engine presets, push the actual GLSL code
+  // For shader engine presets, resolve the GLSL code
   if (preset.engine === 'shader' && preset.code) {
-    pushShader(preset.code, preset.id || 'radio', 2.0); // 2s crossfade
-    return;
+    var shaderBody = preset.code;
+    // stream-studio shader presets use JSON config {"script": N}
+    // Resolve to actual GLSL from our ported shader lookup table
+    try {
+      var config = JSON.parse(preset.code);
+      if (typeof config.script === 'number' && STUDIO_SHADERS[config.script]) {
+        shaderBody = STUDIO_SHADERS[config.script];
+      } else if (typeof config.script === 'number') {
+        // Unknown script ID — use Lava Flow as default
+        shaderBody = STUDIO_SHADERS[7];
+      } else {
+        // JSON but no script field — fall through to reactive
+        shaderBody = null;
+      }
+    } catch (e) {
+      // Not JSON — treat as raw GLSL (from shade-conductor's own tools)
+    }
+    if (shaderBody) {
+      pushShader(shaderBody, preset.id || 'radio', 2.0);
+      return;
+    }
   }
 
   // For other engines, use a generated reactive shader with the preset's palette
